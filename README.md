@@ -48,18 +48,6 @@ It features:
   ```bash
   npm install -g expo-cli
 
-## Project Structure
 
-jobscape/
-├── assets/               # Logos, images
-├── src/
-│   ├── screens/          # All job seeker & recruiter screens
-│   ├── styles/           # Centralized styles and themes
-│   ├── firebase/         # Supabase client setup
-│   ├── utils/            # Helper functions
-│   └── navigation/       # App navigation config
-├── App.tsx               # App entry point
-├── .env                  # Environment variables
-└── README.md             # You're here!
 
 
