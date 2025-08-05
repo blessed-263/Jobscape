@@ -41,13 +41,15 @@ const JobSeekerDashboard = () => {
 		const fetchData = async () => {
 			setLoading(true);
 			try {
-				// Helper to extract relative file path from public URL
+				// Helper to extract relative file path from full public URL
 				const getRelativePath = (fullUrl: string, bucketName: string) => {
 					const prefix = `/storage/v1/object/public/${bucketName}/`;
 					const index = fullUrl.indexOf(prefix);
 					if (index === -1) return null;
 					return fullUrl.substring(index + prefix.length);
 				};
+
+				console.log("🔄 Starting fetchData");
 
 				// Get logged-in user
 				const {
@@ -56,6 +58,7 @@ const JobSeekerDashboard = () => {
 				} = await supabase.auth.getUser();
 
 				if (userError || !user) {
+					console.log("⚠️ User not found or error:", userError);
 					Alert.alert("Session Error", "Please sign in again.");
 					router.replace("/sign-in-jobseeker");
 					return;
@@ -71,8 +74,11 @@ const JobSeekerDashboard = () => {
 					.eq("id", user.id)
 					.single();
 
-				if (profileError) throw profileError;
-				console.log("✅ Job seeker profile:", profileData);
+				if (profileError) {
+					console.error("❌ Error fetching profile:", profileError);
+					throw profileError;
+				}
+				console.log("✅ Job seeker profile fetched:", profileData);
 
 				// Generate signed URLs for avatar and resume
 				let avatarUrl: string | null = null;
@@ -118,7 +124,7 @@ const JobSeekerDashboard = () => {
 					},
 				});
 
-				// Fetch applications with nested job and recruiter info
+				// Fetch applications
 				const {
 					data: applications,
 					count: appliedCount,
@@ -127,27 +133,31 @@ const JobSeekerDashboard = () => {
 					.from("applications")
 					.select(
 						`
-        id,
-        job_id,
-        status,
-        applied_at,
-        jobs (
-          title,
-          recruiter_id,
-          recruiters (
-            company_name
+          id,
+          job_id,
+          status,
+          applied_at,
+          jobs (
+            title,
+            recruiter_id,
+            recruiters (
+              company_name
+            )
           )
-        )
-      `,
+        `,
 						{ count: "exact" }
 					)
 					.eq("job_seeker_id", user.id);
 
-				if (appErr) throw appErr;
+				if (appErr) {
+					console.error("❌ Error fetching applications:", appErr);
+					throw appErr;
+				}
+				console.log(`📄 Applications fetched: ${appliedCount}`);
 				setJobsAppliedCount(appliedCount || 0);
 				setJobsAppliedList(applications || []);
 
-				// Fetch matches with nested job and recruiter info + messages
+				// Fetch matches WITHOUT messages column
 				const {
 					data: matches,
 					count: matchCount,
@@ -156,44 +166,70 @@ const JobSeekerDashboard = () => {
 					.from("matches")
 					.select(
 						`
-        id,
-        job_id,
-        matched_at,
-        messages,
-        jobs (
-          title,
-          recruiter_id,
-          recruiters (
-            company_name
+          id,
+          job_id,
+          matched_at,
+          jobs (
+            title,
+            recruiter_id,
+            recruiters (
+              company_name
+            )
           )
-        )
-      `,
+        `,
 						{ count: "exact" }
 					)
 					.eq("job_seeker_id", user.id);
 
-				if (matchErr) throw matchErr;
+				if (matchErr) {
+					console.error("❌ Error fetching matches:", matchErr);
+					throw matchErr;
+				}
+				console.log(`🤝 Matches fetched: ${matchCount}`);
 				setMatchesCount(matchCount || 0);
 				setMatchesList(matches || []);
 
-				// Process messages for preview list
-				// Flatten messages from matches into one array with necessary fields
-				const messagesPreview = (matches ?? []).flatMap((match) => {
-					// messages is assumed to be an array of message objects in each match
-					const msgs = match.messages ?? [];
-					return msgs.map((msg: any) => ({
+				// Extract match IDs to fetch messages separately
+				const matchIds = matches?.map((m) => m.id) || [];
+				console.log("🆔 Match IDs to fetch messages for:", matchIds);
+
+				// Fetch messages for those matches
+				const { data: messages, error: messagesErr } = await supabase
+					.from("messages")
+					.select("*")
+					.in("match_id", matchIds);
+
+				if (messagesErr) {
+					console.error("❌ Error fetching messages:", messagesErr);
+					throw messagesErr;
+				}
+				console.log(`💬 Messages fetched: ${messages?.length}`);
+
+				// Flatten messages with sender and match info for preview
+				const messagesPreview = messages.map((msg) => {
+					const match = matches?.find((m) => m.id === msg.match_id);
+
+					// Prefer message sender name, fallback to recruiter company name if missing
+					const senderName =
+						msg.sender_name ||
+						match?.jobs?.recruiters?.company_name ||
+						"Unknown";
+
+					return {
 						id: msg.id,
-						match_id: match.id,
+						match_id: msg.match_id,
 						preview_text: msg.preview_text || msg.text || "",
 						sender_avatar: msg.sender_avatar || null,
 						sender_id: msg.sender_id,
-						sender_name: msg.sender_name,
+						sender_name: senderName,
 						timestamp: msg.timestamp,
 						unread: msg.unread || false,
-					}));
+					};
 				});
 
 				setMessagesList(messagesPreview);
+
+				console.log("✅ fetchData complete");
 			} catch (error: any) {
 				console.error(
 					"❌ Error loading dashboard data:",
