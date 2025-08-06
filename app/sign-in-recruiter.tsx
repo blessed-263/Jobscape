@@ -144,7 +144,6 @@ const RecruiterSignIn = () => {
 							name="briefcase-outline"
 							size={54}
 							color={isDark ? "#fff" : "#0a2d52"}
-							style={styles.icon}
 						/>
 					</View>
 
@@ -212,12 +211,13 @@ const RecruiterSignIn = () => {
 					<TouchableOpacity
 						style={[
 							styles.recruiterBtn,
-							{ opacity: loading ? 0.7 : 1, marginTop: 14 },
+							{ opacity: loading ? 0.7 : 1, marginTop: 20 },
 						]}
 						onPress={handleSignIn}
 						disabled={loading}
+						activeOpacity={0.85}
 					>
-						<Ionicons name="log-in-outline" size={21} color="#0a2d52" />
+						<Ionicons name="log-in-outline" size={26} color="#0a2d52" />
 						<Text style={styles.recruiterText}>
 							{loading ? "Signing In..." : "Sign In"}
 						</Text>
@@ -225,7 +225,7 @@ const RecruiterSignIn = () => {
 
 					<TouchableOpacity
 						onPress={() => router.push("/forgot-password")}
-						style={{ marginTop: 20 }}
+						style={{ marginTop: 24 }}
 					>
 						<Text
 							style={[styles.signInPrompt, { fontSize: 15, color: "#1366d6" }]}
@@ -254,27 +254,39 @@ const styles = StyleSheet.create({
 	darkBackground: { backgroundColor: "#1a1a1a" },
 	lightBackground: { backgroundColor: "#ffffff" },
 	scrollContainer: {
-		padding: 20,
+		paddingHorizontal: 20,
+		paddingTop: 30,
+		paddingBottom: 60,
 		flexGrow: 1,
+		alignItems: "center",
+		justifyContent: "flex-start",
 	},
 	iconWrapper: {
 		alignItems: "center",
-		marginTop: 60,
-		marginBottom: 14,
+		marginTop: 40,
+		marginBottom: 20,
+		width: "90%",
+		maxWidth: 500,
+		alignSelf: "center",
 	},
-	icon: {},
 	heading: {
-		fontSize: 22,
-		fontWeight: "600",
-		marginBottom: 4,
+		fontSize: 28,
+		fontWeight: "700",
+		marginBottom: 8,
 		fontFamily: "Montserrat-VariableFont_wght",
 		textAlign: "center",
+		width: "90%",
+		maxWidth: 500,
+		alignSelf: "center",
 	},
 	subheading: {
-		fontSize: 14,
-		marginBottom: 28,
+		fontSize: 16,
+		marginBottom: 32,
 		fontFamily: "Montserrat-VariableFont_wght",
 		textAlign: "center",
+		width: "90%",
+		maxWidth: 500,
+		alignSelf: "center",
 	},
 	lightGrayText: {
 		color: "#888",
@@ -289,29 +301,35 @@ const styles = StyleSheet.create({
 		color: "#0a2d52",
 	},
 	input: {
-		width: "100%",
+		width: "90%",
+		maxWidth: 500,
 		borderWidth: 1,
 		borderColor: "#ddd",
-		borderRadius: 12,
-		padding: 14,
-		marginBottom: 16,
-		fontSize: 15,
+		borderRadius: 16,
+		paddingVertical: 18,
+		paddingHorizontal: 30,
+		marginBottom: 20,
+		fontSize: 16,
 		fontFamily: "Montserrat-VariableFont_wght",
 	},
 	recruiterBtn: {
 		flexDirection: "row",
 		alignItems: "center",
-		backgroundColor: "#fff",
+		backgroundColor: "#ffffff",
 		borderWidth: 1.5,
 		borderColor: "#0a2d52",
-		borderRadius: 12,
-		paddingVertical: 14,
+		borderRadius: 16,
+		paddingVertical: 18,
 		paddingHorizontal: 36,
 		justifyContent: "center",
+		width: "90%",
+		maxWidth: 500,
+		alignSelf: "center",
+		gap: 12,
 	},
 	recruiterText: {
 		color: "#0a2d52",
-		fontSize: 16,
+		fontSize: 18,
 		fontWeight: "600",
 		fontFamily: "Montserrat-VariableFont_wght",
 		marginLeft: 12,
@@ -321,6 +339,9 @@ const styles = StyleSheet.create({
 		color: "#666",
 		marginTop: 40,
 		textAlign: "center",
+		width: "90%",
+		maxWidth: 500,
+		alignSelf: "center",
 	},
 	signInLink: {
 		color: "#0a2d52",

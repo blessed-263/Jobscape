@@ -10,7 +10,6 @@ import {
 	Alert,
 	KeyboardAvoidingView,
 	Platform,
-	View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -57,7 +56,6 @@ const JobSeekerSignInPage = () => {
 				return;
 			}
 
-			// Fetch the user's role from the 'users' table
 			const { data: userData, error: userError } = await supabase
 				.from("users")
 				.select("role")
@@ -71,7 +69,6 @@ const JobSeekerSignInPage = () => {
 			}
 
 			if (userData.role === "job_seeker") {
-				// Check if profile exists in job_seekers table
 				const { data: profileData, error: profileError } = await supabase
 					.from("job_seekers")
 					.select("id")
@@ -79,7 +76,6 @@ const JobSeekerSignInPage = () => {
 					.single();
 
 				if (profileError && profileError.code !== "PGRST116") {
-					// PGRST116 = "No rows found" (handle gracefully)
 					console.error("Error checking profile existence:", profileError);
 					Alert.alert("Error", "Failed to check profile.");
 					setLoading(false);
@@ -87,13 +83,11 @@ const JobSeekerSignInPage = () => {
 				}
 
 				if (!profileData) {
-					// No profile found -> redirect to create profile screen
 					router.replace("/create-jobseeker-profile");
 					setLoading(false);
 					return;
 				}
 
-				// Profile exists, upsert in case metadata changed
 				const { error: upsertProfileError } = await supabase
 					.from("job_seekers")
 					.upsert(
@@ -115,7 +109,6 @@ const JobSeekerSignInPage = () => {
 
 				router.replace("/dashboard-jobseeker");
 			} else if (userData.role === "recruiter") {
-				// Handle recruiter similarly or redirect
 				router.replace("/dashboard-recruiter");
 			} else {
 				Alert.alert("Error", "User role is not recognized.");
@@ -135,7 +128,7 @@ const JobSeekerSignInPage = () => {
 			<KeyboardAvoidingView
 				style={{ flex: 1 }}
 				behavior={Platform.OS === "ios" ? "padding" : undefined}
-				keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0} // adjust if you have header
+				keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
 			>
 				<ScrollView
 					contentContainerStyle={styles.scrollContent}
@@ -145,7 +138,7 @@ const JobSeekerSignInPage = () => {
 						name="person-circle-outline"
 						size={54}
 						color={isDark ? "#fff" : "#0a2d52"}
-						style={{ marginBottom: 14 }}
+						style={{ marginBottom: 20, alignSelf: "center" }}
 					/>
 					<Text style={styles.heading}>Job Seeker</Text>
 					<Text style={styles.heading}>Sign In</Text>
@@ -182,7 +175,7 @@ const JobSeekerSignInPage = () => {
 						disabled={loading}
 						activeOpacity={0.85}
 					>
-						<Ionicons name="log-in-outline" size={21} color="#fff" />
+						<Ionicons name="log-in-outline" size={26} color="#fff" />
 						<Text style={styles.jobSeekerText}>
 							{loading ? "Signing In..." : "Sign In"}
 						</Text>
@@ -190,7 +183,7 @@ const JobSeekerSignInPage = () => {
 
 					<TouchableOpacity
 						onPress={() => router.push("/forgot-password")}
-						style={{ marginTop: 20 }}
+						style={{ marginTop: 24 }}
 					>
 						<Text style={[styles.signInPrompt, styles.forgotPassword]}>
 							Forgot Password?
@@ -217,9 +210,7 @@ const styles = StyleSheet.create({
 		flex: 1,
 		backgroundColor: "#ffffff",
 		justifyContent: "center",
-		alignItems: "center",
-		paddingHorizontal: 20,
-		paddingVertical: 30,
+		alignItems: "stretch", // stretch to full width
 	},
 	dark: {
 		backgroundColor: "#121212",
@@ -229,32 +220,40 @@ const styles = StyleSheet.create({
 	},
 	scrollContent: {
 		alignItems: "center",
-		justifyContent: "center",
+		justifyContent: "flex-start",
 		flexGrow: 1,
+		paddingHorizontal: 0, // no horizontal padding
+		paddingTop: 30, // top spacing from safe area
+		paddingBottom: 60,
 	},
 	heading: {
 		fontSize: 30,
 		fontWeight: "700",
 		color: "#0a2d52",
-		marginBottom: 8,
+		marginBottom: 6,
 		textAlign: "center",
+		width: "100%", // full width
 	},
 	subheading: {
 		fontSize: 16,
 		color: "#4a4a4a",
 		textAlign: "center",
-		marginBottom: 32,
+		marginBottom: 36,
+		width: "90%",
+		maxWidth: 500,
+		alignSelf: "center",
 	},
 	input: {
 		width: "90%",
 		maxWidth: 500,
-		paddingVertical: 14,
-		paddingHorizontal: 18,
-		borderRadius: 12,
+		paddingVertical: 18,
+		paddingHorizontal: 30,
+		borderRadius: 16,
 		fontSize: 16,
 		marginBottom: 20,
 		backgroundColor: "#f7f7f7",
 		color: "#222",
+		alignSelf: "center",
 	},
 	inputDark: {
 		backgroundColor: "#22243a",
@@ -265,17 +264,18 @@ const styles = StyleSheet.create({
 		backgroundColor: "#0a2d52",
 		width: "90%",
 		maxWidth: 500,
-		paddingVertical: 15,
-		borderRadius: 12,
+		paddingVertical: 18,
+		paddingHorizontal: 30,
+		borderRadius: 16,
 		alignItems: "center",
 		justifyContent: "center",
-		gap: 10,
-		marginBottom: 16,
-		paddingHorizontal: 24,
+		gap: 14,
+		marginBottom: 20,
+		alignSelf: "center",
 	},
 	jobSeekerText: {
 		color: "#fff",
-		fontSize: 16,
+		fontSize: 18,
 		fontWeight: "600",
 		flexShrink: 1,
 		textAlign: "center",
@@ -286,6 +286,9 @@ const styles = StyleSheet.create({
 		fontSize: 14,
 		textAlign: "center",
 		flexWrap: "wrap",
+		width: "90%",
+		maxWidth: 500,
+		alignSelf: "center",
 	},
 	signInLink: {
 		fontWeight: "700",
@@ -294,6 +297,7 @@ const styles = StyleSheet.create({
 	forgotPassword: {
 		fontSize: 15,
 		color: "#1366d6",
+		textAlign: "center",
 	},
 });
 

@@ -121,12 +121,7 @@ const JobSeekerSignUp = () => {
 				keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
 			>
 				<ScrollView
-					contentContainerStyle={{
-						alignItems: "center",
-						justifyContent: "center",
-						flexGrow: 1,
-						paddingVertical: 20,
-					}}
+					contentContainerStyle={styles.scrollContent}
 					keyboardShouldPersistTaps="handled"
 					showsVerticalScrollIndicator={false}
 				>
@@ -134,7 +129,7 @@ const JobSeekerSignUp = () => {
 						name="person-circle-outline"
 						size={58}
 						color={isDark ? "#fff" : "#0a2d52"}
-						style={{ marginBottom: 12 }}
+						style={{ marginBottom: 20 }}
 					/>
 
 					<Text style={styles.heading}>Job Seeker</Text>
@@ -159,6 +154,7 @@ const JobSeekerSignUp = () => {
 						onSubmitEditing={() => emailInputRef.current?.focus()}
 						blurOnSubmit={false}
 						importantForAutofill="yes"
+						autoCapitalize="words"
 					/>
 					<TextInput
 						ref={emailInputRef}
@@ -229,7 +225,15 @@ const JobSeekerSignUp = () => {
 							ref={phoneInputRef}
 							style={[
 								styles.input,
-								{ flex: 1, marginLeft: 8, backgroundColor: "transparent" },
+								{
+									flex: 1,
+									marginLeft: 8,
+									backgroundColor: "transparent",
+									paddingVertical: 0,
+									paddingHorizontal: 0,
+									borderRadius: 0,
+									marginBottom: 0,
+								},
 							]}
 							placeholder="Phone (optional)"
 							placeholderTextColor="#aaa"
@@ -246,7 +250,7 @@ const JobSeekerSignUp = () => {
 					<TouchableOpacity
 						style={[
 							styles.jobSeekerBtn,
-							{ marginTop: 12, opacity: loading ? 0.7 : 1 },
+							{ marginTop: 16, opacity: loading ? 0.7 : 1 },
 						]}
 						onPress={handleSignUp}
 						disabled={loading}
@@ -258,7 +262,7 @@ const JobSeekerSignUp = () => {
 							<ActivityIndicator
 								color="#fff"
 								size="small"
-								style={{ marginRight: 10 }}
+								style={{ marginRight: 12 }}
 							/>
 						)}
 						<Ionicons name="log-in-outline" size={22} color="#fff" />
@@ -299,37 +303,52 @@ const styles = StyleSheet.create({
 	light: {
 		backgroundColor: "#ffffff",
 	},
+	scrollContent: {
+		alignItems: "center",
+		justifyContent: "center",
+		flexGrow: 1,
+		paddingVertical: 20,
+	},
 	heading: {
 		fontSize: 30,
 		fontWeight: "700",
 		color: "#0a2d52",
 		marginBottom: 8,
 		textAlign: "center",
+		width: "90%",
+		maxWidth: 500,
+		alignSelf: "center",
 	},
 	subheading: {
 		fontSize: 16,
 		color: "#4a4a4a",
 		textAlign: "center",
 		marginBottom: 32,
+		width: "90%",
+		maxWidth: 500,
+		alignSelf: "center",
 	},
 	jobSeekerBtn: {
 		flexDirection: "row",
 		backgroundColor: "#0a2d52",
 		width: "90%",
 		maxWidth: 500,
-		padding: 15,
-		borderRadius: 12,
+		paddingVertical: 18,
+		paddingHorizontal: 30,
+		borderRadius: 16,
 		alignItems: "center",
 		justifyContent: "center",
-		gap: 10,
-		marginBottom: 16,
+		gap: 14,
+		marginBottom: 20,
+		alignSelf: "center",
 	},
 	jobSeekerText: {
 		color: "#fff",
-		fontSize: 16,
+		fontSize: 18,
 		fontWeight: "600",
 		flexShrink: 1,
 		textAlign: "center",
+		marginLeft: 10,
 	},
 	signInPrompt: {
 		marginTop: 40,
@@ -337,6 +356,9 @@ const styles = StyleSheet.create({
 		fontSize: 14,
 		textAlign: "center",
 		flexWrap: "wrap",
+		width: "90%",
+		maxWidth: 500,
+		alignSelf: "center",
 	},
 	signInLink: {
 		fontWeight: "700",
@@ -345,23 +367,33 @@ const styles = StyleSheet.create({
 	input: {
 		width: "90%",
 		maxWidth: 500,
-		paddingVertical: 14,
-		paddingHorizontal: 18,
-		borderRadius: 10,
+		paddingVertical: 18,
+		paddingHorizontal: 30,
+		borderRadius: 16,
 		fontSize: 16,
-		marginBottom: 14,
+		marginBottom: 20,
 		backgroundColor: "#f7f7f7",
 		color: "#222",
+	},
+	passwordHelper: {
+		width: "90%",
+		maxWidth: 500,
+		color: "#666",
+		fontSize: 12,
+		marginTop: -10,
+		marginBottom: 14,
+		paddingLeft: 30,
+		alignSelf: "center",
 	},
 	phoneContainer: {
 		flexDirection: "row",
 		alignItems: "center",
 		width: "90%",
 		maxWidth: 500,
-		paddingHorizontal: 12,
-		paddingVertical: 14,
-		borderRadius: 10,
-		marginBottom: 14,
+		paddingHorizontal: 14,
+		paddingVertical: 18,
+		borderRadius: 16,
+		marginBottom: 20,
 	},
 	countryPickerButton: {
 		padding: 0,
@@ -371,15 +403,6 @@ const styles = StyleSheet.create({
 		fontWeight: "600",
 		color: "#222",
 		marginLeft: 8,
-	},
-	passwordHelper: {
-		width: "90%",
-		maxWidth: 500,
-		color: "#666",
-		fontSize: 12,
-		marginTop: -10,
-		marginBottom: 14,
-		paddingLeft: 18,
 	},
 });
 

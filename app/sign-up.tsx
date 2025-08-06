@@ -36,7 +36,7 @@ const SignUpPage = () => {
 				accessibilityRole="button"
 				accessibilityLabel="Sign up as Job Seeker"
 			>
-				<Ionicons name="person-circle-outline" size={32} color="#fff" />
+				<Ionicons name="person-circle-outline" size={28} color="#fff" />
 				<Text style={styles.jobSeekerText}>Job Seeker</Text>
 			</TouchableOpacity>
 
@@ -49,7 +49,7 @@ const SignUpPage = () => {
 				accessibilityRole="button"
 				accessibilityLabel="Sign up as Recruiter"
 			>
-				<Ionicons name="briefcase-outline" size={32} color="#0a2d52" />
+				<Ionicons name="briefcase-outline" size={28} color="#0a2d52" />
 				<Text style={styles.recruiterText}>Recruiter</Text>
 			</TouchableOpacity>
 
@@ -115,19 +115,21 @@ const styles = StyleSheet.create({
 		backgroundColor: "#0a2d52",
 		width: "90%",
 		maxWidth: 500,
-		padding: 15,
-		borderRadius: 12,
+		paddingVertical: 18,
+		paddingHorizontal: 30,
+		borderRadius: 16,
 		alignItems: "center",
 		justifyContent: "center",
-		gap: 10,
+		gap: 14,
 		marginBottom: 16,
 	},
 	jobSeekerText: {
 		color: "#fff",
-		fontSize: 16,
+		fontSize: 18,
 		fontWeight: "600",
 		flexShrink: 1,
 		textAlign: "center",
+		marginLeft: 10,
 		fontFamily: "Montserrat-VariableFont_wght",
 	},
 	recruiterBtn: {
@@ -136,18 +138,20 @@ const styles = StyleSheet.create({
 		maxWidth: 500,
 		borderWidth: 1.4,
 		borderColor: "#0a2d52",
-		padding: 15,
-		borderRadius: 12,
+		paddingVertical: 18,
+		paddingHorizontal: 30,
+		borderRadius: 16,
 		alignItems: "center",
 		justifyContent: "center",
-		gap: 10,
+		gap: 14,
 	},
 	recruiterText: {
 		color: "#0a2d52",
-		fontSize: 16,
+		fontSize: 18,
 		fontWeight: "600",
 		flexShrink: 1,
 		textAlign: "center",
+		marginLeft: 10,
 		fontFamily: "Montserrat-VariableFont_wght",
 	},
 	signInRow: {

@@ -151,11 +151,30 @@ const RecruiterSignUp = () => {
 						name="briefcase-outline"
 						size={54}
 						color={isDark ? "#fff" : "#0a2d52"}
-						style={{ marginBottom: 12 }}
+						style={{ marginBottom: 20, alignSelf: "center" }}
 					/>
-					<Text style={styles.heading}>Recruiter</Text>
-					<Text style={styles.heading}>Sign Up</Text>
-					<Text style={styles.subheading}>
+					<Text
+						style={[
+							styles.heading,
+							isDark ? styles.whiteText : styles.darkText,
+						]}
+					>
+						Recruiter
+					</Text>
+					<Text
+						style={[
+							styles.heading,
+							isDark ? styles.whiteText : styles.darkText,
+						]}
+					>
+						Sign Up
+					</Text>
+					<Text
+						style={[
+							styles.subheading,
+							isDark ? styles.lightGrayText : styles.darkGrayText,
+						]}
+					>
 						Create your company account to find and hire top talent.
 					</Text>
 
@@ -202,7 +221,12 @@ const RecruiterSignUp = () => {
 						onSubmitEditing={() => phoneRef.current?.focus()}
 					/>
 
-					<View style={styles.phoneRow}>
+					<View
+						style={[
+							styles.phoneRow,
+							isDark ? styles.inputDark : styles.inputLight,
+						]}
+					>
 						<CountryPicker
 							countryCode={countryCode}
 							withFlag
@@ -212,7 +236,14 @@ const RecruiterSignUp = () => {
 							onSelect={handleCountrySelect}
 							containerButtonStyle={styles.countryPicker}
 						/>
-						<Text style={styles.callingCode}>+{callingCode}</Text>
+						<Text
+							style={[
+								styles.callingCode,
+								isDark ? styles.whiteText : styles.darkText,
+							]}
+						>
+							+{callingCode}
+						</Text>
 						<TextInput
 							ref={phoneRef}
 							style={[styles.phoneInput, isDark && styles.inputDark]}
@@ -262,14 +293,24 @@ const RecruiterSignUp = () => {
 								style={{ marginRight: 12 }}
 							/>
 						) : (
-							<Ionicons name="person-add-outline" size={22} color="#0a2d52" />
+							<Ionicons
+								name="person-add-outline"
+								size={24}
+								color="#0a2d52"
+								style={{ marginRight: 12 }}
+							/>
 						)}
 						<Text style={styles.recruiterText}>
 							{loading ? "Signing Up..." : "Sign Up"}
 						</Text>
 					</TouchableOpacity>
 
-					<Text style={styles.signInPrompt}>
+					<Text
+						style={[
+							styles.signInPrompt,
+							isDark ? styles.whiteText : styles.darkText,
+						]}
+					>
 						Already have an account?{" "}
 						<Text
 							style={styles.signInLink}
@@ -290,7 +331,8 @@ const styles = StyleSheet.create({
 	},
 	scrollContent: {
 		alignItems: "center",
-		padding: 20,
+		paddingHorizontal: 20,
+		paddingVertical: 20,
 		paddingBottom: 40,
 	},
 	darkBackground: {
@@ -300,33 +342,42 @@ const styles = StyleSheet.create({
 		backgroundColor: "#ffffff",
 	},
 	heading: {
-		fontSize: 22,
-		fontWeight: "600",
-		fontFamily: "Montserrat-VariableFont_wght",
-		marginBottom: 4,
+		fontSize: 28,
+		fontWeight: "700",
+		marginBottom: 8,
 		textAlign: "center",
+		width: "90%",
+		maxWidth: 500,
+		alignSelf: "center",
 	},
 	subheading: {
-		fontSize: 14,
-		color: "#888",
-		fontFamily: "Montserrat-VariableFont_wght",
-		marginBottom: 28,
+		fontSize: 16,
+		marginBottom: 32,
 		textAlign: "center",
+		width: "90%",
+		maxWidth: 500,
+		alignSelf: "center",
 	},
 	input: {
-		width: "100%",
+		width: "90%",
+		maxWidth: 500,
 		borderWidth: 1,
 		borderColor: "#ddd",
-		borderRadius: 12,
-		padding: 14,
-		marginBottom: 16,
-		fontSize: 15,
-		backgroundColor: "#f9f9f9",
-		fontFamily: "Montserrat-VariableFont_wght",
+		borderRadius: 16,
+		paddingVertical: 18,
+		paddingHorizontal: 30,
+		fontSize: 16,
+		marginBottom: 20,
+		backgroundColor: "#f7f7f7",
+		color: "#222",
 	},
 	inputDark: {
 		backgroundColor: "#22243a",
 		color: "#fff",
+		borderColor: "#444",
+	},
+	inputLight: {
+		backgroundColor: "#f7f7f7",
 	},
 	textArea: {
 		minHeight: 80,
@@ -335,26 +386,30 @@ const styles = StyleSheet.create({
 	phoneRow: {
 		flexDirection: "row",
 		alignItems: "center",
-		width: "100%",
-		marginBottom: 16,
+		width: "90%",
+		maxWidth: 500,
+		borderRadius: 16,
+		borderWidth: 1,
+		borderColor: "#ddd",
+		paddingVertical: 16,
+		paddingHorizontal: 20,
+		marginBottom: 20,
+		backgroundColor: "#f7f7f7",
 	},
 	countryPicker: {
 		marginRight: 8,
 	},
 	callingCode: {
 		fontSize: 16,
+		fontWeight: "600",
 		marginRight: 8,
-		color: "#222",
 	},
 	phoneInput: {
 		flex: 1,
-		borderWidth: 1,
-		borderColor: "#ddd",
-		borderRadius: 12,
-		padding: 14,
-		fontSize: 15,
-		backgroundColor: "#f9f9f9",
-		fontFamily: "Montserrat-VariableFont_wght",
+		fontSize: 16,
+		paddingVertical: 0,
+		paddingHorizontal: 0,
+		backgroundColor: "transparent",
 		color: "#222",
 	},
 	recruiterBtn: {
@@ -363,29 +418,44 @@ const styles = StyleSheet.create({
 		backgroundColor: "#fff",
 		borderWidth: 1.5,
 		borderColor: "#0a2d52",
-		borderRadius: 12,
-		paddingVertical: 14,
-		paddingHorizontal: 24,
-		width: "100%",
+		borderRadius: 16,
+		paddingVertical: 18,
+		paddingHorizontal: 36,
+		width: "90%",
+		maxWidth: 500,
+		alignSelf: "center",
 		justifyContent: "center",
-		marginTop: 12,
+		marginBottom: 20,
 	},
 	recruiterText: {
 		color: "#0a2d52",
-		fontSize: 16,
+		fontSize: 18,
 		fontWeight: "600",
-		fontFamily: "Montserrat-VariableFont_wght",
-		marginLeft: 12,
+		marginLeft: 0,
 	},
 	signInPrompt: {
 		fontSize: 14,
-		color: "#666",
 		marginTop: 40,
 		textAlign: "center",
+		width: "90%",
+		maxWidth: 500,
+		alignSelf: "center",
 	},
 	signInLink: {
 		fontWeight: "700",
 		color: "#0a2d52",
+	},
+	whiteText: {
+		color: "#fff",
+	},
+	darkText: {
+		color: "#222",
+	},
+	lightGrayText: {
+		color: "#666",
+	},
+	darkGrayText: {
+		color: "#444",
 	},
 });
 

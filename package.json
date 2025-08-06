@@ -67,7 +67,8 @@
     "react-native-web": "~0.20.0",
     "react-native-webview": "13.13.5",
     "undefined": "react-native-community/datetimepicker",
-    "yup": "^1.6.1"
+    "yup": "^1.6.1",
+    "lottie-react-native": "7.2.2"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

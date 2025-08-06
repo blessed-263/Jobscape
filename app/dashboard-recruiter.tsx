@@ -19,6 +19,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { supabase } from "../firebase/supabase";
 import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import LottieView from "lottie-react-native";
 
 import { BarChart } from "react-native-chart-kit";
 
@@ -173,21 +174,6 @@ const RecruiterDashboard = () => {
 			fetchRecruiterData();
 		}, [])
 	);
-
-	const getStatusIcon = (
-		status: string
-	): { icon: IoniconsName; color: string } => {
-		switch (status) {
-			case "accepted":
-				return { icon: "checkmark-done-outline", color: "#22c55e" };
-			case "interview":
-				return { icon: "calendar-outline", color: "#eab308" };
-			case "rejected":
-				return { icon: "close-circle-outline", color: "#ef4444" };
-			default:
-				return { icon: "time-outline", color: "#94a3b8" };
-		}
-	};
 
 	const fetchApplicants = async (recruiterId: string): Promise<Applicant[]> => {
 		// Helper to extract relative file path from full public URL
@@ -621,7 +607,16 @@ const RecruiterDashboard = () => {
 	if (loading) {
 		return (
 			<SafeAreaView style={[styles.container, styles.center]}>
-				<ActivityIndicator size="large" color="#0a2d52" />
+				<LottieView
+					source={require("../assets/animations/loading.json")} // your animation JSON path
+					autoPlay
+					loop
+					style={{ width: 160, height: 160 }}
+				/>
+				{/* Optional loading text */}
+				<Text style={{ color: "#0a2d52", marginTop: 12, fontSize: 16 }}>
+					Loading your dashboard...
+				</Text>
 			</SafeAreaView>
 		);
 	}
