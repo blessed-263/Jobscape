@@ -18,6 +18,7 @@ import Animated, {
 import StackCardItem from "./src/JobSeeker/components/JobsStackCard"; // adjust path if needed
 import { supabase } from "../firebase/supabase"; // update path as needed
 import { Session } from "@supabase/supabase-js";
+import LottieView from "lottie-react-native";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -151,7 +152,12 @@ export default function AnimationStackCard() {
 	if (!fontsLoaded || loading || jobSeekerId === null) {
 		return (
 			<View style={styles.loadingContainer}>
-				<ActivityIndicator size="large" color="#0a2d52" />
+				<LottieView
+					source={require("../assets/animations/loading.json")} // <-- adjust the path to your Lottie JSON file
+					autoPlay
+					loop
+					style={{ width: 150, height: 150 }}
+				/>
 			</View>
 		);
 	}
@@ -159,7 +165,7 @@ export default function AnimationStackCard() {
 	return (
 		<GestureHandlerRootView style={styles.root}>
 			<LinearGradient
-				colors={["#e6eef7", "#ffffff"]}
+				colors={["#c1e8ff", "#ffffff"]}
 				start={{ x: 0.5, y: 0 }}
 				end={{ x: 0.5, y: 1 }}
 				style={styles.gradient}

@@ -21,15 +21,33 @@ import LottieView from "lottie-react-native";
 
 const PRIMARY_BLUE = "#0a2d52";
 
+type Profile = {
+	id: string;
+	name: string;
+	role: string;
+	avatar: string | null;
+	resume: { name: string; uri: string | null };
+};
+
+// Utility function to compute relative path for Supabase Storage
+const getRelativePath = (fullUrl: string, bucketName: string) => {
+	const prefix = `/storage/v1/object/public/${bucketName}/`;
+	const index = fullUrl.indexOf(prefix);
+	if (index === -1) return null;
+	return fullUrl.substring(index + prefix.length);
+};
+
+// Throttle value in ms
+const REFRESH_THROTTLE_MS = 5000;
+const MINIMUM_FETCH_INTERVAL = 30000; // 30 seconds
+
 const JobSeekerDashboard = () => {
 	const router = useRouter();
 	const isDark = useColorScheme() === "dark";
-
 	const fadeAnim = useRef(new Animated.Value(0)).current;
 	const [isExiting, setIsExiting] = useState(false);
-
-	const [profile, setProfile] = useState<any>(null);
-	const [loading, setLoading] = useState(true);
+	const [profile, setProfile] = useState<Profile | null>(null);
+	const [loading, setLoading] = useState(false);
 	const [refreshing, setRefreshing] = useState(false);
 	const [jobsAppliedCount, setJobsAppliedCount] = useState(0);
 	const [matchesCount, setMatchesCount] = useState(0);
@@ -39,21 +57,18 @@ const JobSeekerDashboard = () => {
 	const [snackbarMessage, setSnackbarMessage] = useState("");
 	const [snackbarVisible, setSnackbarVisible] = useState(false);
 	const [lastFetched, setLastFetched] = useState<number | null>(null);
+	const lastRefreshRef = useRef<number>(0);
+	const isFetchingRef = useRef(false);
 
 	const showNotice = (message: string) => {
 		setSnackbarMessage(message);
 		setSnackbarVisible(true);
 	};
 
-	// Helper to extract relative file path from full public URL
-	const getRelativePath = (fullUrl: string, bucketName: string) => {
-		const prefix = `/storage/v1/object/public/${bucketName}/`;
-		const index = fullUrl.indexOf(prefix);
-		if (index === -1) return null;
-		return fullUrl.substring(index + prefix.length);
-	};
-
 	const fetchData = async () => {
+		if (isFetchingRef.current) return; // prevent concurrent fetches
+		isFetchingRef.current = true;
+
 		setLoading(true);
 		try {
 			const {
@@ -67,47 +82,76 @@ const JobSeekerDashboard = () => {
 				return;
 			}
 
-			// Fetch job seeker profile
-			const { data: profileData, error: profileError } = await supabase
-				.from("job_seekers")
-				.select(
-					"id, full_name, profession, avatar_url, resume_url, resume_name"
-				)
-				.eq("id", user.id)
-				.single();
+			// Fetch core data in parallel
+			const [
+				{ data: profileData, error: profileError },
+				{ data: applications, count: appliedCount, error: appErr },
+				{ data: matches, count: matchCount, error: matchErr },
+			] = await Promise.all([
+				supabase
+					.from("job_seekers")
+					.select(
+						"id, full_name, profession, avatar_url, resume_url, resume_name"
+					)
+					.eq("id", user.id)
+					.single(),
+				supabase
+					.from("applications")
+					.select(
+						"id, job_id, status, applied_at, jobs (title, recruiter_id, recruiters (company_name))",
+						{ count: "exact" }
+					)
+					.eq("job_seeker_id", user.id)
+					.limit(25),
+				supabase
+					.from("matches")
+					.select(
+						"id, job_id, matched_at, jobs (title, recruiter_id, recruiters (company_name))",
+						{ count: "exact" }
+					)
+					.eq("job_seeker_id", user.id)
+					.limit(25),
+			]);
 
 			if (profileError) throw profileError;
+			if (appErr) throw appErr;
+			if (matchErr) throw matchErr;
 
-			// Generate signed URLs for avatar and resume
-			let avatarUrl: string | null = null;
-			if (profileData.avatar_url) {
-				const relativeAvatarPath = getRelativePath(
-					profileData.avatar_url,
-					"profile-photos"
-				);
-				if (relativeAvatarPath) {
-					const { data: avatarSigned, error: avatarError } =
-						await supabase.storage
-							.from("profile-photos")
-							.createSignedUrl(relativeAvatarPath, 60);
-					if (!avatarError) avatarUrl = avatarSigned.signedUrl;
-				}
-			}
-
-			let resumeUrl: string | null = null;
-			if (profileData.resume_url) {
-				const relativeResumePath = getRelativePath(
-					profileData.resume_url,
-					"resumes"
-				);
-				if (relativeResumePath) {
-					const { data: resumeSigned, error: resumeError } =
-						await supabase.storage
-							.from("resumes")
-							.createSignedUrl(relativeResumePath, 60);
-					if (!resumeError) resumeUrl = resumeSigned.signedUrl;
-				}
-			}
+			// Signed URLs fetched parallel
+			const [avatarUrl, resumeUrl] = await Promise.all([
+				(async () => {
+					if (profileData.avatar_url) {
+						const relativeAvatarPath = getRelativePath(
+							profileData.avatar_url,
+							"profile-photos"
+						);
+						if (relativeAvatarPath) {
+							const { data: avatarSigned, error: avatarError } =
+								await supabase.storage
+									.from("profile-photos")
+									.createSignedUrl(relativeAvatarPath, 300);
+							if (!avatarError) return avatarSigned.signedUrl;
+						}
+					}
+					return null;
+				})(),
+				(async () => {
+					if (profileData.resume_url) {
+						const relativeResumePath = getRelativePath(
+							profileData.resume_url,
+							"resumes"
+						);
+						if (relativeResumePath) {
+							const { data: resumeSigned, error: resumeError } =
+								await supabase.storage
+									.from("resumes")
+									.createSignedUrl(relativeResumePath, 300);
+							if (!resumeError) return resumeSigned.signedUrl;
+						}
+					}
+					return null;
+				})(),
+			]);
 
 			setProfile({
 				id: profileData.id,
@@ -120,123 +164,73 @@ const JobSeekerDashboard = () => {
 				},
 			});
 
-			// Fetch applications
-			const {
-				data: applications,
-				count: appliedCount,
-				error: appErr,
-			} = await supabase
-				.from("applications")
-				.select(
-					`
-                    id,
-                    job_id,
-                    status,
-                    applied_at,
-                    jobs (
-                        title,
-                        recruiter_id,
-                        recruiters (
-                            company_name
-                        )
-                    )
-                `,
-					{ count: "exact" }
-				)
-				.eq("job_seeker_id", user.id);
-
-			if (appErr) throw appErr;
-
 			setJobsAppliedCount(appliedCount || 0);
 			setJobsAppliedList(applications || []);
-
-			// Fetch matches without messages column
-			const {
-				data: matches,
-				count: matchCount,
-				error: matchErr,
-			} = await supabase
-				.from("matches")
-				.select(
-					`
-                    id,
-                    job_id,
-                    matched_at,
-                    jobs (
-                        title,
-                        recruiter_id,
-                        recruiters (
-                            company_name
-                        )
-                    )
-                `,
-					{ count: "exact" }
-				)
-				.eq("job_seeker_id", user.id);
-
-			if (matchErr) throw matchErr;
-
 			setMatchesCount(matchCount || 0);
 			setMatchesList(matches || []);
 
-			// Extract match IDs to fetch messages separately
-			const matchIds = matches?.map((m) => m.id) || [];
-
-			// Fetch messages for those matches
-			const { data: messages, error: messagesErr } = await supabase
-				.from("messages")
-				.select("*")
-				.in("match_id", matchIds);
-
-			if (messagesErr) throw messagesErr;
-
-			// Flatten messages with sender and match info for preview
-			const messagesPreview = messages.map((msg) => {
-				const match = matches?.find((m) => m.id === msg.match_id);
-
-				// Prefer message sender name, fallback to recruiter company name if missing
-				const senderName =
-					msg.sender_name || match?.jobs?.recruiters?.company_name || "Unknown";
-
-				return {
-					id: msg.id,
-					match_id: msg.match_id,
-					preview_text: msg.preview_text || msg.text || "",
-					sender_avatar: msg.sender_avatar || null,
-					sender_id: msg.sender_id,
-					sender_name: senderName,
-					timestamp: msg.timestamp,
-					unread: msg.unread || false,
-					text: msg.text || "",
-				};
-			});
-
+			// Fetch messages for matches
+			const matchIds = (matches || []).map((m: any) => m.id);
+			let messagesPreview: any[] = [];
+			if (matchIds.length) {
+				const { data: messages, error: messagesErr } = await supabase
+					.from("messages")
+					.select("*")
+					.in("match_id", matchIds)
+					.order("timestamp", { ascending: false })
+					.limit(50);
+				if (messagesErr) throw messagesErr;
+				messagesPreview = (messages || []).map((msg: any) => {
+					const match = matches.find((m: any) => m.id === msg.match_id);
+					const senderName =
+						msg.sender_name ||
+						match?.jobs?.recruiters?.company_name ||
+						"Unknown";
+					return {
+						id: msg.id,
+						match_id: msg.match_id,
+						preview_text: msg.preview_text || msg.text || "",
+						sender_avatar: msg.sender_avatar || null,
+						sender_id: msg.sender_id,
+						sender_name: senderName,
+						timestamp: msg.timestamp,
+						unread: msg.unread || false,
+						text: msg.text || "",
+					};
+				});
+			}
 			setMessagesList(messagesPreview);
 
 			setLastFetched(Date.now());
 		} catch (error: any) {
-			Alert.alert("Error", "Failed to load dashboard data.");
+			Alert.alert("Error", error?.message || "Failed to load dashboard data.");
 		} finally {
 			setLoading(false);
+			setRefreshing(false);
+			isFetchingRef.current = false;
 		}
 	};
 
-	useEffect(() => {
+	// Throttled refresh
+	const onRefresh = async () => {
 		const now = Date.now();
-		if (!lastFetched || now - lastFetched > 5 * 60 * 1000) {
-			fetchData();
-		} else {
-			setLoading(false);
-		}
-	}, []);
+		if (now - lastRefreshRef.current < REFRESH_THROTTLE_MS) return;
+		lastRefreshRef.current = now;
+		setRefreshing(true);
+		await fetchData();
+	};
 
+	// Refresh with stale check in useFocusEffect
 	useFocusEffect(
 		React.useCallback(() => {
-			// Fetch fresh dashboard data when screen is focused
-			fetchData();
-		}, []) // no dependencies so it runs every focus
+			if (!lastFetched || Date.now() - lastFetched > MINIMUM_FETCH_INTERVAL) {
+				fetchData();
+			}
+			// No cleanup needed for fetch
+		}, [lastFetched])
 	);
 
+	// Fade in on loading complete
 	useEffect(() => {
 		if (!loading) {
 			Animated.timing(fadeAnim, {
@@ -259,12 +253,7 @@ const JobSeekerDashboard = () => {
 		});
 	};
 
-	const onRefresh = async () => {
-		setRefreshing(true);
-		await fetchData();
-		setRefreshing(false);
-	};
-
+	// Keep resume open UX
 	const handleResumePress = () => {
 		const uri = profile?.resume?.uri;
 		if (uri) {
@@ -279,6 +268,21 @@ const JobSeekerDashboard = () => {
 		}
 	};
 
+	// Profile progress
+	const profileFields = [
+		profile?.name,
+		profile?.role,
+		profile?.avatar,
+		profile?.resume?.uri,
+	];
+	const filledFields = profileFields.filter(
+		(f) => f && `${f}`.length > 0
+	).length;
+	const profileProgress = Math.round(
+		(filledFields / profileFields.length) * 100
+	);
+
+	// Fallback: loading UI
 	if (loading || !profile) {
 		return (
 			<View
@@ -299,17 +303,6 @@ const JobSeekerDashboard = () => {
 			</View>
 		);
 	}
-
-	const profileFields = [
-		profile.name,
-		profile.role,
-		profile.avatar,
-		profile.resume.uri,
-	];
-	const filledFields = profileFields.filter((f) => f && f.length > 0).length;
-	const profileProgress = Math.round(
-		(filledFields / profileFields.length) * 100
-	);
 
 	return (
 		<View style={{ flex: 1 }}>

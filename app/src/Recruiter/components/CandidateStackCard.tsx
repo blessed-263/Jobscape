@@ -1,9 +1,15 @@
 import React, { useEffect } from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
+import {
+	ImageBackground,
+	StyleSheet,
+	Text,
+	View,
+	TouchableOpacity,
+} from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
-	Extrapolate,
 	interpolate,
+	interpolateColor,
 	useAnimatedStyle,
 	useDerivedValue,
 	useSharedValue,
@@ -13,34 +19,92 @@ import Animated, {
 	runOnJS,
 } from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
-import { data } from "../data/Candidates";
+import { router } from "expo-router";
+
+import { supabase } from "../../../../firebase/supabase";
+
+type CandidateType = {
+	id: string;
+	full_name: string;
+	avatar_url?: string | null; // still here in type but unused
+	poster?: string | null;
+	profession?: string;
+	location?: string;
+	summary?: string;
+	skills?: string[];
+	qualifications?: string[];
+	experience?: any;
+	appliedJobTitle?: string;
+	applicationStatus?: string;
+};
 
 type Props = {
-	item: (typeof data)[0];
+	item: CandidateType;
 	index: number;
 	actualIndex: number;
 	setActualIndex: React.Dispatch<React.SetStateAction<number>>;
 	onRemove: () => void;
+	recruiterId: string;
 };
 
-const StackCardItem = ({ item, index, actualIndex, onRemove }: Props) => {
+const CandidateCardItem = ({
+	item,
+	index,
+	actualIndex,
+	onRemove,
+	recruiterId,
+}: Props) => {
+	useEffect(() => {
+		console.log(`CandidateCardItem rendering for id: ${item.id}`);
+		console.log("Item data:", item);
+		console.log("Avatar URL (unused):", item.avatar_url);
+	}, [item]);
+
 	const position = useSharedValue({ x: 0, y: 0 });
 	const lastOffset = useSharedValue({ x: 0, y: 0 });
-	const value = useSharedValue(data.length || 0);
+	const value = useSharedValue(0);
+
 	const opacity = useSharedValue(1);
 	const scaleDown = useSharedValue(1);
-
 	const glowOpacity = useSharedValue(0);
 	const glowScale = useSharedValue(1);
+	const glowColor = useSharedValue<"red" | "green">("red");
+
+	const passCandidate = async () => {
+		if (!recruiterId) return;
+		const { error } = await supabase.from("swipe_actions").insert({
+			recruiter_id: recruiterId,
+			job_seeker_id: item.id,
+			direction: "left",
+		});
+		if (error) console.error("passCandidate error:", error.message);
+	};
+
+	const likeCandidate = async () => {
+		if (!recruiterId) return;
+		const { error } = await supabase.from("swipe_actions").insert({
+			recruiter_id: recruiterId,
+			job_seeker_id: item.id,
+			direction: "right",
+		});
+		if (error) console.error("likeCandidate error:", error.message);
+	};
+
+	const onInfoPress = () => {
+		router.push(`../candidate-details?id=${item.id}`);
+	};
 
 	const panGestureHandler = Gesture.Pan()
-		.runOnJS(true)
 		.onUpdate(({ translationX, translationY }) => {
 			if (actualIndex !== index) return;
 			position.value = {
 				x: translationX + lastOffset.value.x,
 				y: translationY + lastOffset.value.y,
 			};
+			if (glowOpacity.value === 0) {
+				glowColor.value = "red";
+				glowOpacity.value = withTiming(1, { duration: 200 });
+			}
 		})
 		.onEnd(() => {
 			if (
@@ -49,13 +113,22 @@ const StackCardItem = ({ item, index, actualIndex, onRemove }: Props) => {
 			) {
 				lastOffset.value = { x: 0, y: 0 };
 				position.value = withSpring({ x: 0, y: 0 });
+				glowOpacity.value = withTiming(0, { duration: 200 });
 			} else {
 				lastOffset.value = { x: 0, y: 0 };
+				const direction = position.value.x > 0 ? "right" : "left";
 				position.value = withTiming(
 					{ x: position.value.x * 12, y: position.value.y * 12 },
 					{ duration: 450 },
-					(finished) => finished && runOnJS(onRemove)()
+					(finished) => {
+						if (finished) {
+							if (direction === "right") runOnJS(likeCandidate)();
+							else runOnJS(passCandidate)();
+							runOnJS(onRemove)();
+						}
+					}
 				);
+				glowOpacity.value = withTiming(0, { duration: 200 });
 			}
 		});
 
@@ -63,45 +136,44 @@ const StackCardItem = ({ item, index, actualIndex, onRemove }: Props) => {
 		.numberOfTaps(2)
 		.onEnd(() => {
 			if (actualIndex !== index) return;
+			glowColor.value = "green";
 			glowOpacity.value = withTiming(1, { duration: 600 });
 			glowScale.value = withTiming(1.2, { duration: 800 }, () => {
 				glowOpacity.value = withDelay(600, withTiming(0, { duration: 1000 }));
 				glowScale.value = withDelay(600, withTiming(1, { duration: 800 }));
 			});
 			scaleDown.value = withTiming(0.5, { duration: 800 });
-			opacity.value = withTiming(0, { duration: 800 }, () =>
-				runOnJS(onRemove)()
-			);
+			opacity.value = withTiming(0, { duration: 800 }, () => {
+				runOnJS(likeCandidate)();
+				runOnJS(onRemove)();
+			});
 		});
 
 	const composedGesture = Gesture.Simultaneous(panGestureHandler, doubleTap);
 
-	const rotate = useDerivedValue(() => {
-		return interpolate(
+	const rotate = useDerivedValue(() =>
+		interpolate(
 			index,
 			[value.value - 3, value.value - 2, value.value - 1, value.value],
-			[0, 8, -8, 0],
-			Extrapolate.CLAMP
-		);
-	});
+			[0, 8, -8, 0]
+		)
+	);
 
-	const additionalTranslate = useDerivedValue(() => {
-		return interpolate(
+	const additionalTranslate = useDerivedValue(() =>
+		interpolate(
 			index,
 			[value.value - 3, value.value - 2, value.value - 1, value.value],
-			[0, 30, -30, 0],
-			Extrapolate.CLAMP
-		);
-	});
+			[0, 30, -30, 0]
+		)
+	);
 
-	const scale = useDerivedValue(() => {
-		return interpolate(
+	const scale = useDerivedValue(() =>
+		interpolate(
 			index,
 			[value.value - 3, value.value - 2, value.value - 1, value.value],
-			[0.2, 0.9, 0.9, 1],
-			Extrapolate.CLAMP
-		);
-	});
+			[0.2, 0.9, 0.9, 1]
+		)
+	);
 
 	const cardStyle = useAnimatedStyle(() => ({
 		transform: [
@@ -113,68 +185,108 @@ const StackCardItem = ({ item, index, actualIndex, onRemove }: Props) => {
 		opacity: opacity.value,
 	}));
 
-	const glowStyle = useAnimatedStyle(() => ({
-		opacity: glowOpacity.value,
-		transform: [{ scale: glowScale.value }],
-	}));
+	const glowStyle = useAnimatedStyle(() => {
+		const borderColor = interpolateColor(
+			glowColor.value === "red" ? 0 : 1,
+			[0, 1],
+			["#FF3300", "#00FF6A"]
+		);
+		const backgroundColor = interpolateColor(
+			glowColor.value === "red" ? 0 : 1,
+			[0, 1],
+			["rgba(255, 51, 0, 0.05)", "rgba(0, 255, 106, 0.05)"]
+		);
+
+		return {
+			opacity: glowOpacity.value,
+			borderColor,
+			backgroundColor,
+			shadowColor: glowColor.value === "red" ? "#FF3300" : "#00FF6A",
+			shadowRadius: 30,
+			shadowOpacity: 0.9,
+			shadowOffset: { width: 0, height: 0 },
+		};
+	});
 
 	useEffect(() => {
 		value.value = withSpring(actualIndex);
 	}, [actualIndex]);
 
 	return (
-		<GestureDetector gesture={composedGesture}>
+		<>
 			<Animated.View
-				style={[{ zIndex: actualIndex + 1 }, styles.animatedView, cardStyle]}
-			>
-				<Animated.View style={[styles.glowCircle, glowStyle]} />
-				<Image source={item.poster} style={styles.poster} />
-				<LinearGradient
-					colors={["rgba(0,0,0,0.4)", "rgba(0,0,0,0.8)"]}
-					style={styles.gradientOverlay}
-				/>
-				<Text style={styles.jCursive}>J</Text>
+				pointerEvents="none"
+				style={[styles.glowCircle, glowStyle]}
+			/>
 
-				<View style={styles.contentWrapper}>
-					<Image source={item.profile} style={styles.avatar} />
-					<Text style={styles.name}>{item.title}</Text>
-					<Text style={styles.subtitle}>{item.subtitle}</Text>
+			<GestureDetector gesture={composedGesture}>
+				<Animated.View
+					style={[{ zIndex: actualIndex + 1 }, styles.animatedView, cardStyle]}
+				>
+					<ImageBackground
+						source={
+							item.poster
+								? { uri: item.poster }
+								: require("../images/jobscape.png")
+						}
+						style={styles.imageStyle}
+						imageStyle={{ borderRadius: 28 }}
+					>
+						{/* Profile photo removed */}
 
-					{item.badge && (
-						<View style={styles.badge}>
-							<Text style={styles.badgeText}>{item.badge}</Text>
-						</View>
-					)}
+						<LinearGradient
+							colors={["transparent", "rgba(0, 0, 0, 0.25)"]}
+							style={[styles.gradientOverlay, { height: "40%" }]}
+						/>
 
-					{item.description && (
-						<Text numberOfLines={3} style={styles.description}>
-							{item.description}
-						</Text>
-					)}
+						<Text style={styles.jCursive}>J</Text>
 
-					{item.skills?.length > 0 && (
-						<View style={styles.skillsContainer}>
-							{item.skills.slice(0, 4).map((skill, idx) => (
-								<View style={styles.skillBadge} key={idx}>
-									<Text style={styles.skillText}>{skill}</Text>
-								</View>
-							))}
-						</View>
-					)}
-
-					{item.qualifications?.length > 0 && (
-						<View style={styles.qualificationsContainer}>
-							<Text style={styles.qualificationsTitle}>Top Qualifications</Text>
-							{item.qualifications.slice(0, 3).map((q, idx) => (
-								<Text key={idx} style={styles.qualificationItem}>
-									• {q}
+						<View style={styles.imageView}>
+							<View style={styles.imageTextView}>
+								<Text numberOfLines={2} style={styles.titleText}>
+									{item.full_name || "Name not available"}
 								</Text>
-							))}
+
+								{item.profession && (
+									<Text numberOfLines={1} style={styles.companyText}>
+										Profession: {item.profession}
+									</Text>
+								)}
+
+								{item.appliedJobTitle && (
+									<Text numberOfLines={1} style={styles.appliedJobText}>
+										Applied for: {item.appliedJobTitle} (
+										{item.applicationStatus})
+									</Text>
+								)}
+
+								{item.skills && item.skills.length > 0 && (
+									<Text numberOfLines={2} style={styles.skillsText}>
+										Skills: {item.skills.join(", ")}
+									</Text>
+								)}
+
+								{item.qualifications && item.qualifications.length > 0 && (
+									<Text numberOfLines={2} style={styles.qualificationsText}>
+										Qualifications: {item.qualifications.join(", ")}
+									</Text>
+								)}
+
+								{item.summary && (
+									<Text numberOfLines={3} style={styles.descriptionText}>
+										Summary: {item.summary}
+									</Text>
+								)}
+							</View>
 						</View>
-					)}
-				</View>
-			</Animated.View>
-		</GestureDetector>
+
+						<TouchableOpacity style={styles.infoButton} onPress={onInfoPress}>
+							<Text style={styles.infoButtonText}>i</Text>
+						</TouchableOpacity>
+					</ImageBackground>
+				</Animated.View>
+			</GestureDetector>
+		</>
 	);
 };
 
@@ -184,22 +296,34 @@ const styles = StyleSheet.create({
 		width: 320,
 		height: 530,
 		borderRadius: 28,
-		overflow: "hidden",
-		backgroundColor: "#222",
-		elevation: 16,
+		backgroundColor: "#FFF",
 		shadowColor: "#000",
 		shadowOffset: { width: 0, height: 10 },
 		shadowOpacity: 0.3,
 		shadowRadius: 12,
+		elevation: 16,
+		overflow: "hidden",
 	},
-	poster: {
+	glowCircle: {
 		position: "absolute",
+		top: -6,
+		left: -6,
+		right: -6,
+		bottom: -6,
+		borderRadius: 34,
+		borderWidth: 3,
+	},
+	imageStyle: {
 		width: "100%",
 		height: "100%",
-		resizeMode: "cover",
+		overflow: "hidden",
 	},
 	gradientOverlay: {
-		...StyleSheet.absoluteFillObject,
+		position: "absolute",
+		bottom: 0,
+		left: 0,
+		right: 0,
+		borderRadius: 28,
 	},
 	jCursive: {
 		position: "absolute",
@@ -210,106 +334,85 @@ const styles = StyleSheet.create({
 		transform: [{ rotate: "10deg" }],
 		fontFamily: "Cookie_400Regular",
 	},
-	glowCircle: {
-		position: "absolute",
-		top: -10,
-		left: -10,
-		right: -10,
-		bottom: -10,
-		borderRadius: 34,
-		borderWidth: 3,
-		borderColor: "#00FF6A",
-		backgroundColor: "rgba(0, 255, 106, 0.1)", // stronger glow background
-		shadowColor: "#00FF6A",
-		shadowOffset: { width: 0, height: 0 },
-		shadowOpacity: 1, // increased opacity
-		shadowRadius: 40, // increased radius for softer glow
-		elevation: 20, // Android shadow
-		zIndex: 99999, // very high zIndex
-	},
-	contentWrapper: {
+	imageView: {
 		flex: 1,
-		justifyContent: "center",
-		alignItems: "center",
-		padding: 20,
+		justifyContent: "flex-end",
 	},
-	avatar: {
-		width: 120,
-		height: 120,
-		borderRadius: 60,
-		borderWidth: 2,
-		borderColor: "#fff",
-		marginBottom: 16,
-		shadowColor: "#00FF6A",
-		shadowOffset: { width: 0, height: 0 },
-		shadowOpacity: 0.9,
-		shadowRadius: 10,
-		elevation: 10,
+	imageTextView: {
+		paddingVertical: 16,
+		paddingHorizontal: 16,
+		backgroundColor: "rgba(0, 0, 0, 0.4)",
+		borderBottomLeftRadius: 28,
+		borderBottomRightRadius: 28,
+		zIndex: 10,
 	},
-	name: {
+	titleText: {
+		color: "#FFFFFF",
 		fontSize: 22,
-		fontWeight: "700",
-		color: "#fff",
+		fontWeight: "800",
 		marginBottom: 4,
 	},
-	subtitle: {
+	subtitleText: {
+		color: "#CCCCCC",
 		fontSize: 15,
-		color: "#ddd",
-		marginBottom: 10,
-	},
-	badge: {
-		backgroundColor: "#1a84e0",
-		borderRadius: 14,
-		paddingHorizontal: 10,
-		paddingVertical: 4,
-		marginBottom: 10,
-	},
-	badgeText: {
-		color: "#fff",
-		fontSize: 13,
 		fontWeight: "600",
+		marginBottom: 6,
 	},
-	description: {
-		color: "#eee",
+	descriptionText: {
+		color: "#DDDDDD",
 		fontSize: 14,
-		textAlign: "center",
+		fontWeight: "400",
 		lineHeight: 20,
-		paddingHorizontal: 10,
-		marginBottom: 10,
+		marginTop: 10,
 	},
-	skillsContainer: {
-		flexDirection: "row",
-		flexWrap: "wrap",
-		justifyContent: "center",
-		marginBottom: 10,
-	},
-	skillBadge: {
-		backgroundColor: "#444",
-		paddingHorizontal: 10,
-		paddingVertical: 4,
-		borderRadius: 12,
-		margin: 4,
-	},
-	skillText: {
-		color: "#fff",
-		fontSize: 13,
-		fontWeight: "500",
-	},
-	qualificationsContainer: {
-		alignItems: "center",
-	},
-	qualificationsTitle: {
-		color: "#fff",
-		fontWeight: "600",
+	companyText: {
+		color: "#AAAAAA",
 		fontSize: 14,
-		marginBottom: 4,
+		fontWeight: "500",
+		marginBottom: 6,
 	},
-	qualificationItem: {
-		color: "#ccc",
-		fontSize: 13,
-		textAlign: "center",
+	skillsText: {
+		color: "#99ccff",
+		fontSize: 14,
+		fontWeight: "600",
+		marginTop: 4,
+	},
+	qualificationsText: {
+		color: "#a1caff",
+		fontSize: 14,
+		fontWeight: "600",
+		marginTop: 4,
+	},
+	appliedJobText: {
+		color: "#a0d8ff",
+		fontSize: 14,
+		fontWeight: "700",
+		marginTop: 6,
+	},
+	infoButton: {
+		position: "absolute",
+		top: 16,
+		right: 16,
+		backgroundColor: "rgba(0,0,0,0.5)",
+		borderRadius: 14,
+		width: 28,
+		height: 28,
+		justifyContent: "center",
+		alignItems: "center",
+		zIndex: 20,
+	},
+	infoButtonText: {
+		color: "#fff",
+		fontWeight: "700",
+		fontSize: 18,
 		lineHeight: 18,
+	},
+	fallbackText: {
+		color: "#888",
+		fontSize: 14,
+		fontStyle: "italic",
+		marginTop: 4,
 	},
 });
 
-export default StackCardItem;
+export default CandidateCardItem;
