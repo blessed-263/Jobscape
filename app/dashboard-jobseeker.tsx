@@ -9,7 +9,6 @@ import {
 	Linking,
 	useColorScheme,
 	RefreshControl,
-	ActivityIndicator,
 	Animated,
 } from "react-native";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
@@ -18,8 +17,7 @@ import { supabase } from "../firebase/supabase";
 import { Card, Button, Avatar, List, Snackbar } from "react-native-paper";
 import { useFocusEffect } from "@react-navigation/native";
 import LottieView from "lottie-react-native";
-
-const PRIMARY_BLUE = "#0a2d52";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 type Profile = {
 	id: string;
@@ -40,6 +38,8 @@ const getRelativePath = (fullUrl: string, bucketName: string) => {
 // Throttle value in ms
 const REFRESH_THROTTLE_MS = 5000;
 const MINIMUM_FETCH_INTERVAL = 30000; // 30 seconds
+const PRIMARY_BLUE = "#0a2d52";
+const CACHE_KEY = "jobSeekerDashboardCache";
 
 const JobSeekerDashboard = () => {
 	const router = useRouter();
@@ -47,7 +47,7 @@ const JobSeekerDashboard = () => {
 	const fadeAnim = useRef(new Animated.Value(0)).current;
 	const [isExiting, setIsExiting] = useState(false);
 	const [profile, setProfile] = useState<Profile | null>(null);
-	const [loading, setLoading] = useState(false);
+	const [loading, setLoading] = useState(true); // Set initial loading to true
 	const [refreshing, setRefreshing] = useState(false);
 	const [jobsAppliedCount, setJobsAppliedCount] = useState(0);
 	const [matchesCount, setMatchesCount] = useState(0);
@@ -56,7 +56,6 @@ const JobSeekerDashboard = () => {
 	const [messagesList, setMessagesList] = useState<any[]>([]);
 	const [snackbarMessage, setSnackbarMessage] = useState("");
 	const [snackbarVisible, setSnackbarVisible] = useState(false);
-	const [lastFetched, setLastFetched] = useState<number | null>(null);
 	const lastRefreshRef = useRef<number>(0);
 	const isFetchingRef = useRef(false);
 
@@ -66,10 +65,13 @@ const JobSeekerDashboard = () => {
 	};
 
 	const fetchData = async () => {
-		if (isFetchingRef.current) return; // prevent concurrent fetches
+		if (isFetchingRef.current) {
+			console.log("Fetch already in progress, skipping.");
+			return;
+		}
 		isFetchingRef.current = true;
-
 		setLoading(true);
+
 		try {
 			const {
 				data: { user },
@@ -82,7 +84,6 @@ const JobSeekerDashboard = () => {
 				return;
 			}
 
-			// Fetch core data in parallel
 			const [
 				{ data: profileData, error: profileError },
 				{ data: applications, count: appliedCount, error: appErr },
@@ -117,7 +118,6 @@ const JobSeekerDashboard = () => {
 			if (appErr) throw appErr;
 			if (matchErr) throw matchErr;
 
-			// Signed URLs fetched parallel
 			const [avatarUrl, resumeUrl] = await Promise.all([
 				(async () => {
 					if (profileData.avatar_url) {
@@ -153,7 +153,7 @@ const JobSeekerDashboard = () => {
 				})(),
 			]);
 
-			setProfile({
+			const profileToSet = {
 				id: profileData.id,
 				name: profileData.full_name,
 				role: profileData.profession || "Job Seeker",
@@ -162,14 +162,8 @@ const JobSeekerDashboard = () => {
 					name: profileData.resume_name || "My_Resume.pdf",
 					uri: resumeUrl,
 				},
-			});
+			};
 
-			setJobsAppliedCount(appliedCount || 0);
-			setJobsAppliedList(applications || []);
-			setMatchesCount(matchCount || 0);
-			setMatchesList(matches || []);
-
-			// Fetch messages for matches
 			const matchIds = (matches || []).map((m: any) => m.id);
 			let messagesPreview: any[] = [];
 			if (matchIds.length) {
@@ -199,10 +193,27 @@ const JobSeekerDashboard = () => {
 					};
 				});
 			}
+
+			setProfile(profileToSet);
+			setJobsAppliedCount(appliedCount || 0);
+			setJobsAppliedList(applications || []);
+			setMatchesCount(matchCount || 0);
+			setMatchesList(matches || []);
 			setMessagesList(messagesPreview);
 
-			setLastFetched(Date.now());
+			const cacheData = {
+				profile: profileToSet,
+				applications,
+				matches,
+				messages: messagesPreview,
+				timestamp: Date.now(),
+			};
+
+			await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
+
+			console.log("Data fetched and cached successfully.");
 		} catch (error: any) {
+			console.error("Fetch data error:", error);
 			Alert.alert("Error", error?.message || "Failed to load dashboard data.");
 		} finally {
 			setLoading(false);
@@ -211,35 +222,67 @@ const JobSeekerDashboard = () => {
 		}
 	};
 
-	// Throttled refresh
-	const onRefresh = async () => {
-		const now = Date.now();
-		if (now - lastRefreshRef.current < REFRESH_THROTTLE_MS) return;
-		lastRefreshRef.current = now;
-		setRefreshing(true);
-		await fetchData();
+	const loadCachedData = async () => {
+		try {
+			const cached = await AsyncStorage.getItem(CACHE_KEY);
+			if (cached) {
+				const parsed = JSON.parse(cached);
+				setProfile(parsed.profile);
+				setJobsAppliedList(parsed.applications);
+				setMatchesList(parsed.matches);
+				setMessagesList(parsed.messages);
+				console.log("Loaded data from cache.");
+				return parsed.timestamp;
+			}
+		} catch (error) {
+			console.error("Failed to load cached data:", error);
+		}
+		return null;
 	};
 
-	// Refresh with stale check in useFocusEffect
+	// Use a single, unified effect for loading and refreshing data
 	useFocusEffect(
 		React.useCallback(() => {
-			if (!lastFetched || Date.now() - lastFetched > MINIMUM_FETCH_INTERVAL) {
-				fetchData();
-			}
-			// No cleanup needed for fetch
-		}, [lastFetched])
+			const loadAndFetch = async () => {
+				setLoading(true);
+				const lastFetchedTimestamp = await loadCachedData();
+				const now = Date.now();
+
+				// Check if cache exists and is not stale
+				if (
+					lastFetchedTimestamp &&
+					now - lastFetchedTimestamp < MINIMUM_FETCH_INTERVAL
+				) {
+					console.log("Cache is fresh, skipping network fetch.");
+					setLoading(false);
+					return;
+				}
+
+				// If cache is stale or doesn't exist, fetch new data
+				console.log("Cache is stale or not present, fetching new data.");
+				await fetchData();
+			};
+
+			loadAndFetch();
+
+			// Cleanup function for useFocusEffect
+			return () => {
+				// Any cleanup logic here if needed
+				console.log("Leaving dashboard screen.");
+			};
+		}, [])
 	);
 
 	// Fade in on loading complete
 	useEffect(() => {
-		if (!loading) {
+		if (!loading && !isExiting) {
 			Animated.timing(fadeAnim, {
 				toValue: 1,
 				duration: 700,
 				useNativeDriver: true,
 			}).start();
 		}
-	}, [loading]);
+	}, [loading, isExiting]);
 
 	const handleNavigateWithExit = (path: string) => {
 		setIsExiting(true);
@@ -251,6 +294,18 @@ const JobSeekerDashboard = () => {
 			setIsExiting(false);
 			router.push(path);
 		});
+	};
+
+	const onRefresh = async () => {
+		const now = Date.now();
+		if (now - lastRefreshRef.current < REFRESH_THROTTLE_MS) {
+			showNotice("Please wait a moment before refreshing again.");
+			setRefreshing(false);
+			return;
+		}
+		lastRefreshRef.current = now;
+		setRefreshing(true);
+		await fetchData();
 	};
 
 	// Keep resume open UX
@@ -276,8 +331,9 @@ const JobSeekerDashboard = () => {
 		profile?.resume?.uri,
 	];
 	const filledFields = profileFields.filter(
-		(f) => f && `${f}`.length > 0
+		(f) => typeof f === "string" && f.length > 0
 	).length;
+
 	const profileProgress = Math.round(
 		(filledFields / profileFields.length) * 100
 	);
@@ -360,36 +416,26 @@ const JobSeekerDashboard = () => {
 								)}
 							</View>
 
-							<View style={styles.resumeProgressRow}>
-								<TouchableOpacity
+							{/* Reverted resume button and progress indicator */}
+							<View style={styles.resumeAndProgressContainer}>
+								<Button
+									mode="outlined"
+									icon="file-document-outline"
 									onPress={handleResumePress}
-									style={[styles.resumeButton, { borderColor: PRIMARY_BLUE }]}
-									activeOpacity={0.8}
+									style={styles.resumeButton}
+									labelStyle={styles.resumeButtonLabel}
 								>
-									<Ionicons
-										name="document-text-outline"
-										size={20}
-										color={PRIMARY_BLUE}
-										style={{ marginRight: 6 }}
-									/>
-									<Text
-										style={[styles.resumeText, { color: PRIMARY_BLUE }]}
-										numberOfLines={1}
-										adjustsFontSizeToFit
-										minimumFontScale={0.8}
-									>
-										View Resume
-									</Text>
-								</TouchableOpacity>
-
-								<View style={styles.progressCircle}>
-									<Text
-										style={[styles.progressPercent, { color: PRIMARY_BLUE }]}
-									>
-										{profileProgress}%
-									</Text>
-									<Text style={styles.progressLabel}>Profile Progress</Text>
-								</View>
+									View Resume
+								</Button>
+								<Text
+									style={[
+										styles.progressText,
+										{ color: isDark ? "#ddd" : "#444" },
+									]}
+								>
+									Profile Progress:{" "}
+									<Text style={{ fontWeight: "700" }}>{profileProgress}%</Text>
+								</Text>
 							</View>
 						</Card.Content>
 					</Card>
@@ -686,24 +732,9 @@ const JobSeekerDashboard = () => {
 					onPress={() => handleNavigateWithExit("/settings")}
 					activeOpacity={0.85}
 				>
-					<Ionicons name="settings-outline" size={30} color="white" />
+					<Ionicons name="settings-outline" size={30} color="#fff" />
 				</TouchableOpacity>
 			</Animated.View>
-
-			{/* Snackbar */}
-			<Snackbar
-				visible={snackbarVisible}
-				onDismiss={() => setSnackbarVisible(false)}
-				duration={3000}
-				style={{
-					backgroundColor: PRIMARY_BLUE,
-					borderRadius: 12,
-					marginHorizontal: 20,
-					marginBottom: 16,
-				}}
-			>
-				<Text style={{ color: "#fff", fontSize: 14 }}>{snackbarMessage}</Text>
-			</Snackbar>
 		</View>
 	);
 };
@@ -711,6 +742,7 @@ const JobSeekerDashboard = () => {
 const styles = StyleSheet.create({
 	container: {
 		flex: 1,
+		backgroundColor: "#f4f7f9",
 		paddingHorizontal: 16,
 		paddingTop: 16,
 	},
@@ -718,7 +750,7 @@ const styles = StyleSheet.create({
 		backgroundColor: "#121212",
 	},
 	lightContainer: {
-		backgroundColor: "#fff",
+		backgroundColor: "#f4f7f9",
 	},
 	loadingContainer: {
 		flex: 1,
@@ -726,137 +758,135 @@ const styles = StyleSheet.create({
 		alignItems: "center",
 	},
 	loadingText: {
-		marginTop: 12,
+		marginTop: 20,
 		fontSize: 16,
+		fontWeight: "600",
 	},
 	profileCard: {
-		marginBottom: 16,
-		borderRadius: 12,
-		elevation: 2,
-		backgroundColor: "#F7FAFD", // Very faint light blue
+		marginBottom: 20,
+		borderRadius: 15,
+		backgroundColor: "#fff",
+		elevation: 5,
+		shadowColor: "#000",
+		shadowOffset: { width: 0, height: 2 },
+		shadowOpacity: 0.1,
+		shadowRadius: 4,
 	},
 	profileCardDark: {
-		backgroundColor: "#273A5E",
+		backgroundColor: "#1e1e1e",
 	},
-
-	summaryCard: {
-		marginBottom: 16,
-		borderRadius: 12,
-		elevation: 1,
-		backgroundColor: "#F9FCFF", // Even paler airy blue
-	},
-	summaryCardDark: {
-		backgroundColor: "#273A5E",
-	},
-
-	sectionCard: {
-		marginBottom: 16,
-		borderRadius: 12,
-		elevation: 1,
-		backgroundColor: "#F5F8FD", // Very faint grayish blue
-	},
-	sectionCardDark: {
-		backgroundColor: "#273A5E",
-	},
-
 	profileHeader: {
 		flexDirection: "row",
 		justifyContent: "space-between",
 		alignItems: "center",
+		marginBottom: 16,
 	},
 	nameRoleContainer: {
 		flex: 1,
-		paddingRight: 12,
+		marginRight: 16,
 	},
 	name: {
-		fontSize: 22,
-		fontWeight: "700",
+		fontSize: 24,
+		fontWeight: "800",
+		marginBottom: 4,
 	},
 	role: {
-		fontSize: 14,
-		marginTop: 2,
+		fontSize: 16,
 	},
-	resumeProgressRow: {
-		marginTop: 16,
+	// Reverted styles for resume and progress
+	resumeAndProgressContainer: {
 		flexDirection: "row",
 		justifyContent: "space-between",
 		alignItems: "center",
+		marginTop: 10,
 	},
 	resumeButton: {
-		flexDirection: "row",
-		alignItems: "center",
-		paddingHorizontal: 12,
-		paddingVertical: 8,
-		borderRadius: 20,
+		borderColor: PRIMARY_BLUE,
 		borderWidth: 1,
 	},
-	resumeText: {
-		fontWeight: "700",
+	resumeButtonLabel: {
+		color: PRIMARY_BLUE,
+	},
+	progressText: {
 		fontSize: 14,
 	},
-	progressCircle: {
-		alignItems: "center",
-		justifyContent: "center",
+	summaryCard: {
+		marginBottom: 20,
+		borderRadius: 15,
+		backgroundColor: "#E3F0FF",
+		elevation: 3,
+		shadowColor: "#000",
+		shadowOffset: { width: 0, height: 1 },
+		shadowOpacity: 0.05,
+		shadowRadius: 3,
 	},
-	progressPercent: {
-		fontSize: 20,
-		fontWeight: "700",
+	summaryCardDark: {
+		backgroundColor: "#222",
 	},
-	progressLabel: {
-		fontSize: 12,
-		color: "#555",
-	},
-
 	summaryText: {
 		fontSize: 16,
-		lineHeight: 22,
+		lineHeight: 24,
 	},
 	swipeBtnWrapper: {
-		marginBottom: 24,
-		paddingHorizontal: 16,
+		marginBottom: 20,
 	},
 	ctaButton: {
-		borderRadius: 24,
-		paddingVertical: 10,
+		borderRadius: 25,
+		paddingVertical: 8,
+		elevation: 3,
 	},
-
+	sectionCard: {
+		marginBottom: 20,
+		borderRadius: 15,
+		backgroundColor: "#fff",
+		elevation: 3,
+		shadowColor: "#000",
+		shadowOffset: { width: 0, height: 1 },
+		shadowOpacity: 0.05,
+		shadowRadius: 3,
+	},
+	sectionCardDark: {
+		backgroundColor: "#1e1e1e",
+	},
 	viewAllText: {
 		color: PRIMARY_BLUE,
-		fontWeight: "700",
-		paddingRight: 12,
+		fontWeight: "600",
 		fontSize: 14,
-	},
-	emptyText: {
-		fontSize: 14,
-		fontStyle: "italic",
-		textAlign: "center",
-		paddingVertical: 16,
+		marginRight: 16,
 	},
 	itemTitle: {
-		fontWeight: "700",
-		fontSize: 14,
+		fontWeight: "600",
+		fontSize: 15,
 	},
 	itemDescription: {
-		fontSize: 12,
-		color: "#555",
+		fontSize: 13,
+		color: "#6b7280",
+	},
+	emptyText: {
+		textAlign: "center",
+		paddingVertical: 20,
+		fontStyle: "italic",
 	},
 	link: {
 		fontSize: 16,
-		marginVertical: 12,
+		marginVertical: 8,
 		fontWeight: "600",
 	},
 	floatingSettingsBtn: {
 		position: "absolute",
-		bottom: 24,
-		right: 24,
+		bottom: 25,
+		right: 25,
 		backgroundColor: PRIMARY_BLUE,
 		borderRadius: 30,
-		padding: 12,
-		elevation: 6,
-		shadowColor: "#000",
+		width: 60,
+		height: 60,
+		justifyContent: "center",
+		alignItems: "center",
+		elevation: 8,
+		shadowColor: PRIMARY_BLUE,
+		shadowOffset: { width: 0, height: 4 },
 		shadowOpacity: 0.3,
-		shadowOffset: { width: 0, height: 3 },
-		shadowRadius: 4,
+		shadowRadius: 5,
 	},
 });
 
