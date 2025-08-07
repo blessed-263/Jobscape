@@ -14,10 +14,19 @@ import {
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { supabase } from "../firebase/supabase";
-import { Card, Button, Avatar, List, Snackbar } from "react-native-paper";
+import {
+	Card,
+	Button,
+	Avatar,
+	List,
+	Snackbar,
+	DefaultTheme,
+	Provider as PaperProvider,
+} from "react-native-paper";
 import { useFocusEffect } from "@react-navigation/native";
 import LottieView from "lottie-react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import CircularProgress from "react-native-circular-progress-indicator";
 
 type Profile = {
 	id: string;
@@ -35,7 +44,37 @@ const getRelativePath = (fullUrl: string, bucketName: string) => {
 	return fullUrl.substring(index + prefix.length);
 };
 
-// Throttle value in ms
+// Custom theme for React Native Paper
+const theme = {
+	...DefaultTheme,
+	roundness: 8,
+	colors: {
+		...DefaultTheme.colors,
+		primary: "#0a2d52",
+		accent: "#E3F0FF",
+		background: "#f4f7f9",
+		text: "#333",
+		onSurface: "#444",
+		placeholder: "#6b7280",
+	},
+};
+
+const darkTheme = {
+	...DefaultTheme,
+	dark: true,
+	roundness: 8,
+	colors: {
+		...DefaultTheme.colors,
+		primary: "#87CEEB", // A brighter blue for dark mode
+		accent: "#1e1e1e",
+		background: "#121212",
+		surface: "#1e1e1e",
+		text: "#fff",
+		onSurface: "#ccc",
+		placeholder: "#9CA3AF",
+	},
+};
+
 const REFRESH_THROTTLE_MS = 5000;
 const MINIMUM_FETCH_INTERVAL = 30000; // 30 seconds
 const PRIMARY_BLUE = "#0a2d52";
@@ -44,10 +83,11 @@ const CACHE_KEY = "jobSeekerDashboardCache";
 const JobSeekerDashboard = () => {
 	const router = useRouter();
 	const isDark = useColorScheme() === "dark";
+	const currentTheme = isDark ? darkTheme : theme;
 	const fadeAnim = useRef(new Animated.Value(0)).current;
 	const [isExiting, setIsExiting] = useState(false);
 	const [profile, setProfile] = useState<Profile | null>(null);
-	const [loading, setLoading] = useState(true); // Set initial loading to true
+	const [loading, setLoading] = useState(true);
 	const [refreshing, setRefreshing] = useState(false);
 	const [jobsAppliedCount, setJobsAppliedCount] = useState(0);
 	const [matchesCount, setMatchesCount] = useState(0);
@@ -66,7 +106,6 @@ const JobSeekerDashboard = () => {
 
 	const fetchData = async () => {
 		if (isFetchingRef.current) {
-			console.log("Fetch already in progress, skipping.");
 			return;
 		}
 		isFetchingRef.current = true;
@@ -210,8 +249,6 @@ const JobSeekerDashboard = () => {
 			};
 
 			await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
-
-			console.log("Data fetched and cached successfully.");
 		} catch (error: any) {
 			console.error("Fetch data error:", error);
 			Alert.alert("Error", error?.message || "Failed to load dashboard data.");
@@ -231,7 +268,6 @@ const JobSeekerDashboard = () => {
 				setJobsAppliedList(parsed.applications);
 				setMatchesList(parsed.matches);
 				setMessagesList(parsed.messages);
-				console.log("Loaded data from cache.");
 				return parsed.timestamp;
 			}
 		} catch (error) {
@@ -240,7 +276,6 @@ const JobSeekerDashboard = () => {
 		return null;
 	};
 
-	// Use a single, unified effect for loading and refreshing data
 	useFocusEffect(
 		React.useCallback(() => {
 			const loadAndFetch = async () => {
@@ -248,32 +283,25 @@ const JobSeekerDashboard = () => {
 				const lastFetchedTimestamp = await loadCachedData();
 				const now = Date.now();
 
-				// Check if cache exists and is not stale
 				if (
 					lastFetchedTimestamp &&
 					now - lastFetchedTimestamp < MINIMUM_FETCH_INTERVAL
 				) {
-					console.log("Cache is fresh, skipping network fetch.");
 					setLoading(false);
 					return;
 				}
 
-				// If cache is stale or doesn't exist, fetch new data
-				console.log("Cache is stale or not present, fetching new data.");
 				await fetchData();
 			};
 
 			loadAndFetch();
 
-			// Cleanup function for useFocusEffect
 			return () => {
-				// Any cleanup logic here if needed
-				console.log("Leaving dashboard screen.");
+				setIsExiting(true);
 			};
 		}, [])
 	);
 
-	// Fade in on loading complete
 	useEffect(() => {
 		if (!loading && !isExiting) {
 			Animated.timing(fadeAnim, {
@@ -308,7 +336,6 @@ const JobSeekerDashboard = () => {
 		await fetchData();
 	};
 
-	// Keep resume open UX
 	const handleResumePress = () => {
 		const uri = profile?.resume?.uri;
 		if (uri) {
@@ -323,7 +350,6 @@ const JobSeekerDashboard = () => {
 		}
 	};
 
-	// Profile progress
 	const profileFields = [
 		profile?.name,
 		profile?.role,
@@ -334,408 +360,587 @@ const JobSeekerDashboard = () => {
 		(f) => typeof f === "string" && f.length > 0
 	).length;
 
-	const profileProgress = Math.round(
-		(filledFields / profileFields.length) * 100
+	const computeProfileProgress = (
+		filledFields: number,
+		totalFields: number
+	): number => {
+		if (totalFields === 0) return 0;
+		return Math.round((filledFields / totalFields) * 100);
+	};
+
+	const getProgressColor = (progress: number) => {
+		if (progress < 50) return "#ff6347"; // red-ish
+		if (progress < 100) return "#ffc107"; // amber-ish
+		return PRIMARY_BLUE; // default success color
+	};
+
+	// Usage inside your component rendering
+
+	const profileProgress = computeProfileProgress(
+		filledFields,
+		profileFields.length
 	);
 
-	// Fallback: loading UI
 	if (loading || !profile) {
 		return (
-			<View
-				style={[
-					styles.loadingContainer,
-					isDark ? styles.darkContainer : styles.lightContainer,
-				]}
-			>
-				<LottieView
-					source={require("../assets/animations/loading.json")}
-					autoPlay
-					loop
-					style={{ width: 160, height: 160 }}
-				/>
-				<Text style={[styles.loadingText, { color: isDark ? "#ccc" : "#333" }]}>
-					Loading your dashboard...
-				</Text>
-			</View>
+			<PaperProvider theme={currentTheme}>
+				<View
+					style={[
+						styles.loadingContainer,
+						isDark ? styles.darkContainer : styles.lightContainer,
+					]}
+				>
+					<LottieView
+						source={require("../assets/animations/loading.json")}
+						autoPlay
+						loop
+						style={{ width: 160, height: 160 }}
+					/>
+					<Text
+						style={[styles.loadingText, { color: isDark ? "#ccc" : "#333" }]}
+					>
+						Loading your dashboard...
+					</Text>
+				</View>
+			</PaperProvider>
 		);
 	}
 
 	return (
-		<View style={{ flex: 1 }}>
-			<ScrollView
-				style={[
-					styles.container,
-					isDark ? styles.darkContainer : styles.lightContainer,
-				]}
-				showsVerticalScrollIndicator={false}
-				contentContainerStyle={{ paddingBottom: 80 }}
-				refreshControl={
-					<RefreshControl
-						refreshing={refreshing}
-						onRefresh={onRefresh}
-						tintColor={PRIMARY_BLUE}
-						colors={[PRIMARY_BLUE]}
-					/>
-				}
-			>
-				<Animated.View style={{ opacity: fadeAnim }}>
-					{/* Profile Card */}
-					<Card
-						style={[styles.profileCard, isDark && styles.profileCardDark]}
-						onPress={() => handleNavigateWithExit("/edit-profile")}
-					>
-						<Card.Content>
-							<View style={styles.profileHeader}>
-								<View style={styles.nameRoleContainer}>
-									<Text
-										style={[styles.name, { color: PRIMARY_BLUE }]}
-										numberOfLines={1}
-									>
-										{profile.name}
-									</Text>
-									<Text
-										style={[
-											styles.role,
-											{ color: isDark ? "#9CA3AF" : "#6b7280" },
-										]}
-										numberOfLines={1}
-									>
-										{profile.role}
-									</Text>
+		<PaperProvider theme={currentTheme}>
+			<View style={{ flex: 1 }}>
+				<ScrollView
+					style={[
+						styles.container,
+						isDark ? styles.darkContainer : styles.lightContainer,
+					]}
+					showsVerticalScrollIndicator={false}
+					contentContainerStyle={{ paddingBottom: 80 }}
+					refreshControl={
+						<RefreshControl
+							refreshing={refreshing}
+							onRefresh={onRefresh}
+							tintColor={PRIMARY_BLUE}
+							colors={[PRIMARY_BLUE]}
+						/>
+					}
+				>
+					<Animated.View style={{ opacity: fadeAnim }}>
+						{/* Profile Card */}
+						<Card
+							style={[styles.profileCard, isDark && styles.profileCardDark]}
+							onPress={() => handleNavigateWithExit("/edit-profile")}
+						>
+							<Card.Content>
+								<View style={styles.profileHeader}>
+									<View style={styles.nameRoleContainer}>
+										<Text
+											style={[
+												styles.name,
+												{
+													color: isDark
+														? currentTheme.colors.onSurface
+														: PRIMARY_BLUE,
+												},
+											]}
+											numberOfLines={1}
+										>
+											{profile.name}
+										</Text>
+										<Text
+											style={[
+												styles.role,
+												{
+													color: isDark
+														? currentTheme.colors.placeholder
+														: "#6b7280",
+												},
+											]}
+											numberOfLines={1}
+										>
+											{profile.role}
+										</Text>
+									</View>
+									{profile.avatar ? (
+										<Avatar.Image size={80} source={{ uri: profile.avatar }} />
+									) : (
+										<Avatar.Icon
+											size={80}
+											icon="account-circle-outline"
+											color={PRIMARY_BLUE}
+											style={{ backgroundColor: isDark ? "#222" : "#eee" }}
+										/>
+									)}
 								</View>
 
-								{profile.avatar ? (
-									<Avatar.Image size={80} source={{ uri: profile.avatar }} />
-								) : (
-									<Avatar.Icon
-										size={80}
-										icon="account-circle-outline"
-										color={PRIMARY_BLUE}
-										style={{ backgroundColor: isDark ? "#222" : "#eee" }}
+								{/* Profile Progress and Resume Section (Reverted to original design) */}
+								<View style={styles.profileProgressSection}>
+									<View style={styles.profileProgressCard}>
+										<CircularProgress
+											value={profileProgress}
+											maxValue={100}
+											radius={35}
+											duration={1500}
+											progressValueColor={getProgressColor(profileProgress)} // This hides numeric value if you want, but here probably keep transparent or same as circle bg
+											activeStrokeColor={getProgressColor(profileProgress)}
+											inActiveStrokeColor={isDark ? "#333" : "#e0e0e0"}
+											activeStrokeWidth={8}
+											inActiveStrokeWidth={8}
+											valueSuffix={""} // No suffix since we're hiding numeric value
+											showProgressValue={false} // Hide numeric percentage
+											title={"Progress"} // Text to display inside the circle
+											titleColor={isDark ? "#ccc" : "#333"} // Color of the text inside circle
+											titleStyle={{
+												fontWeight: "bold",
+												fontSize: 10,
+												textAlign: "center",
+											}} // Style of the title text
+										/>
+									</View>
+
+									<Button
+										mode="outlined"
+										icon="file-document-outline"
+										onPress={handleResumePress}
+										style={styles.resumeButton}
+										labelStyle={styles.resumeButtonLabel}
+									>
+										View Resume
+									</Button>
+								</View>
+							</Card.Content>
+						</Card>
+
+						{/* Profile Summary */}
+						<Card
+							style={[styles.summaryCard, isDark && styles.summaryCardDark]}
+						>
+							<Card.Title
+								title="Profile Summary"
+								titleStyle={{
+									color: isDark ? currentTheme.colors.onSurface : PRIMARY_BLUE,
+									fontWeight: "700",
+								}}
+								left={(props) => (
+									<MaterialIcons
+										{...props}
+										name="person-outline"
+										color={isDark ? currentTheme.colors.primary : PRIMARY_BLUE}
 									/>
 								)}
-							</View>
-
-							{/* Reverted resume button and progress indicator */}
-							<View style={styles.resumeAndProgressContainer}>
-								<Button
-									mode="outlined"
-									icon="file-document-outline"
-									onPress={handleResumePress}
-									style={styles.resumeButton}
-									labelStyle={styles.resumeButtonLabel}
-								>
-									View Resume
-								</Button>
+							/>
+							<Card.Content>
 								<Text
 									style={[
-										styles.progressText,
-										{ color: isDark ? "#ddd" : "#444" },
+										styles.summaryText,
+										{ color: isDark ? currentTheme.colors.onSurface : "#444" },
 									]}
 								>
-									Profile Progress:{" "}
-									<Text style={{ fontWeight: "700" }}>{profileProgress}%</Text>
+									Welcome back,{" "}
+									<Text style={{ fontWeight: "700" }}>{profile.name}</Text>.
+									Your professional title is{" "}
+									<Text style={{ fontWeight: "700" }}>{profile.role}</Text>.
 								</Text>
-							</View>
-						</Card.Content>
-					</Card>
+								<Text
+									style={[
+										styles.summaryText,
+										{
+											color: isDark ? currentTheme.colors.placeholder : "#666",
+											marginTop: 8,
+										},
+									]}
+								>
+									You have applied to{" "}
+									<Text style={{ fontWeight: "700" }}>{jobsAppliedCount}</Text>{" "}
+									jobs and have{" "}
+									<Text style={{ fontWeight: "700" }}>{matchesCount}</Text>{" "}
+									matches.
+								</Text>
+							</Card.Content>
+						</Card>
 
-					{/* Profile Summary */}
-					<Card style={[styles.summaryCard, isDark && styles.summaryCardDark]}>
-						<Card.Title
-							title="Profile Summary"
-							titleStyle={{ color: PRIMARY_BLUE, fontWeight: "700" }}
-							left={(props) => (
-								<MaterialIcons
-									{...props}
-									name="person-outline"
-									color={PRIMARY_BLUE}
-								/>
-							)}
-						/>
-						<Card.Content>
-							<Text
-								style={[
-									styles.summaryText,
-									{ color: isDark ? "#ddd" : "#444" },
-								]}
+						{/* Start Swiping button */}
+						<View style={styles.swipeBtnWrapper}>
+							<Button
+								mode="contained"
+								buttonColor={currentTheme.colors.accent}
+								textColor={PRIMARY_BLUE}
+								style={styles.ctaButton}
+								onPress={() => handleNavigateWithExit("/job-stack-screen")}
+								icon="briefcase-search"
+								contentStyle={{ flexDirection: "row-reverse" }}
 							>
-								Welcome back,{" "}
-								<Text style={{ fontWeight: "700" }}>{profile.name}</Text>. Your
-								professional title is{" "}
-								<Text style={{ fontWeight: "700" }}>{profile.role}</Text>.
-							</Text>
-							<Text
-								style={[
-									styles.summaryText,
-									{ color: isDark ? "#aaa" : "#666", marginTop: 8 },
-								]}
-							>
-								You have applied to{" "}
-								<Text style={{ fontWeight: "700" }}>{jobsAppliedCount}</Text>{" "}
-								jobs and have{" "}
-								<Text style={{ fontWeight: "700" }}>{matchesCount}</Text>{" "}
-								matches.
-							</Text>
-						</Card.Content>
-					</Card>
+								Start Swiping Jobs
+							</Button>
+						</View>
 
-					{/* Start Swiping button */}
-					<View style={styles.swipeBtnWrapper}>
-						<Button
-							mode="contained"
-							buttonColor="#E3F0FF"
-							textColor={PRIMARY_BLUE}
-							style={styles.ctaButton}
-							onPress={() => handleNavigateWithExit("/job-stack-screen")}
-							icon="briefcase-search"
-							contentStyle={{ flexDirection: "row-reverse" }}
+						{/* Jobs Applied List Preview */}
+						<Card
+							style={[styles.sectionCard, isDark && styles.sectionCardDark]}
 						>
-							Start Swiping Jobs
-						</Button>
-					</View>
-
-					{/* Jobs Applied List Preview */}
-					<Card style={[styles.sectionCard, isDark && styles.sectionCardDark]}>
-						<Card.Title
-							title={`Jobs Applied (${jobsAppliedCount})`}
-							titleStyle={{
-								color: PRIMARY_BLUE,
-								fontWeight: "700",
-								fontSize: 16,
-							}}
-							left={(props) => (
-								<MaterialIcons
-									{...props}
-									name="work-outline"
-									color={PRIMARY_BLUE}
-								/>
-							)}
-							right={() => (
-								<TouchableOpacity
-									onPress={() => handleNavigateWithExit("/applications")}
-								>
-									<Text style={styles.viewAllText}>View All</Text>
-								</TouchableOpacity>
-							)}
-						/>
-
-						{jobsAppliedList.length === 0 ? (
-							<Card.Content>
-								<Text
-									style={[
-										styles.emptyText,
-										{ color: isDark ? "#777" : "#999" },
-									]}
-								>
-									No applications yet.
-								</Text>
-							</Card.Content>
-						) : (
-							<List.Section>
-								{jobsAppliedList.slice(0, 3).map((app) => (
-									<List.Item
-										key={app.id}
-										title={app.jobs.title}
-										titleStyle={styles.itemTitle}
-										description={`Status: ${app.status}`}
-										descriptionStyle={styles.itemDescription}
-										left={(props) => (
-											<MaterialIcons
-												{...props}
-												name="business-center"
-												color={PRIMARY_BLUE}
-												style={{ marginTop: 6 }}
-											/>
-										)}
-										onPress={() =>
-											showNotice("To view more details, tap 'View All'")
-										}
+							<Card.Title
+								title={`Jobs Applied (${jobsAppliedCount})`}
+								titleStyle={{
+									color: isDark ? currentTheme.colors.onSurface : PRIMARY_BLUE,
+									fontWeight: "700",
+									fontSize: 16,
+								}}
+								left={(props) => (
+									<MaterialIcons
+										{...props}
+										name="work-outline"
+										color={isDark ? currentTheme.colors.primary : PRIMARY_BLUE}
 									/>
-								))}
-							</List.Section>
-						)}
-					</Card>
+								)}
+								right={() => (
+									<TouchableOpacity
+										onPress={() => handleNavigateWithExit("/applications")}
+									>
+										<Text
+											style={[
+												styles.viewAllText,
+												{
+													color: isDark
+														? currentTheme.colors.primary
+														: PRIMARY_BLUE,
+												},
+											]}
+										>
+											View All
+										</Text>
+									</TouchableOpacity>
+								)}
+							/>
 
-					{/* Matches Preview */}
-					<Card style={[styles.sectionCard, isDark && styles.sectionCardDark]}>
-						<Card.Title
-							title={`Matches (${matchesCount})`}
-							titleStyle={{
-								color: PRIMARY_BLUE,
-								fontWeight: "700",
-								fontSize: 16,
-							}}
-							left={(props) => (
-								<Ionicons
-									{...props}
-									name="heart-outline"
-									color={PRIMARY_BLUE}
-								/>
+							{jobsAppliedList.length === 0 ? (
+								<Card.Content>
+									<Text
+										style={[
+											styles.emptyText,
+											{
+												color: isDark
+													? currentTheme.colors.placeholder
+													: "#999",
+											},
+										]}
+									>
+										No applications yet.
+									</Text>
+								</Card.Content>
+							) : (
+								<List.Section>
+									{jobsAppliedList.slice(0, 3).map((app) => (
+										<List.Item
+											key={app.id}
+											title={app.jobs.title}
+											titleStyle={[
+												styles.itemTitle,
+												{ color: isDark ? currentTheme.colors.text : "#333" },
+											]}
+											description={`Status: ${app.status}`}
+											descriptionStyle={[
+												styles.itemDescription,
+												{
+													color: isDark
+														? currentTheme.colors.placeholder
+														: "#6b7280",
+												},
+											]}
+											left={(props) => (
+												<MaterialIcons
+													{...props}
+													name="business-center"
+													color={
+														isDark ? currentTheme.colors.primary : PRIMARY_BLUE
+													}
+													style={{ marginTop: 6 }}
+												/>
+											)}
+											onPress={() =>
+												showNotice("To view more details, tap 'View All'")
+											}
+										/>
+									))}
+								</List.Section>
 							)}
-							right={() => (
-								<TouchableOpacity
-									onPress={() => handleNavigateWithExit("/matches-jobseeker")}
-								>
-									<Text style={styles.viewAllText}>View All</Text>
-								</TouchableOpacity>
-							)}
-						/>
+						</Card>
 
-						{matchesList.length === 0 ? (
-							<Card.Content>
-								<Text
-									style={[
-										styles.emptyText,
-										{ color: isDark ? "#777" : "#999" },
-									]}
-								>
-									No matches yet.
-								</Text>
-							</Card.Content>
-						) : (
-							<List.Section>
-								{matchesList.slice(0, 3).map((match) => (
-									<List.Item
-										key={match.id}
-										title={match.jobs.title}
-										titleStyle={styles.itemTitle}
-										description={`Company: ${match.jobs.recruiters.company_name}`}
-										descriptionStyle={styles.itemDescription}
-										left={(props) => (
-											<Ionicons
-												{...props}
-												name="heart"
-												color={PRIMARY_BLUE}
-												size={16}
-												style={{ marginTop: 6 }}
-											/>
-										)}
-										onPress={() =>
-											showNotice("Open 'View All' to chat with matches")
-										}
+						{/* Matches Preview */}
+						<Card
+							style={[styles.sectionCard, isDark && styles.sectionCardDark]}
+						>
+							<Card.Title
+								title={`Matches (${matchesCount})`}
+								titleStyle={{
+									color: isDark ? currentTheme.colors.onSurface : PRIMARY_BLUE,
+									fontWeight: "700",
+									fontSize: 16,
+								}}
+								left={(props) => (
+									<Ionicons
+										{...props}
+										name="heart-outline"
+										color={isDark ? currentTheme.colors.primary : PRIMARY_BLUE}
 									/>
-								))}
-							</List.Section>
-						)}
-					</Card>
+								)}
+								right={() => (
+									<TouchableOpacity
+										onPress={() => handleNavigateWithExit("/matches-jobseeker")}
+									>
+										<Text
+											style={[
+												styles.viewAllText,
+												{
+													color: isDark
+														? currentTheme.colors.primary
+														: PRIMARY_BLUE,
+												},
+											]}
+										>
+											View All
+										</Text>
+									</TouchableOpacity>
+								)}
+							/>
 
-					{/* Messages Preview */}
-					<Card style={[styles.sectionCard, isDark && styles.sectionCardDark]}>
-						<Card.Title
-							title="Messages"
-							titleStyle={{
-								color: PRIMARY_BLUE,
-								fontWeight: "700",
-								fontSize: 16,
-							}}
-							left={(props) => (
-								<Ionicons
-									{...props}
-									name="chatbubble-ellipses-outline"
-									color={PRIMARY_BLUE}
-								/>
+							{matchesList.length === 0 ? (
+								<Card.Content>
+									<Text
+										style={[
+											styles.emptyText,
+											{
+												color: isDark
+													? currentTheme.colors.placeholder
+													: "#999",
+											},
+										]}
+									>
+										No matches yet.
+									</Text>
+								</Card.Content>
+							) : (
+								<List.Section>
+									{matchesList.slice(0, 3).map((match) => (
+										<List.Item
+											key={match.id}
+											title={match.jobs.title}
+											titleStyle={[
+												styles.itemTitle,
+												{ color: isDark ? currentTheme.colors.text : "#333" },
+											]}
+											description={`Company: ${match.jobs.recruiters.company_name}`}
+											descriptionStyle={[
+												styles.itemDescription,
+												{
+													color: isDark
+														? currentTheme.colors.placeholder
+														: "#6b7280",
+												},
+											]}
+											left={(props) => (
+												<Ionicons
+													{...props}
+													name="heart"
+													color={
+														isDark ? currentTheme.colors.primary : PRIMARY_BLUE
+													}
+													size={16}
+													style={{ marginTop: 6 }}
+												/>
+											)}
+											onPress={() =>
+												showNotice("Open 'View All' to chat with matches")
+											}
+										/>
+									))}
+								</List.Section>
 							)}
-							right={() => (
-								<TouchableOpacity
-									onPress={() => handleNavigateWithExit("/messages-jobseeker")}
-								>
-									<Text style={styles.viewAllText}>View All</Text>
-								</TouchableOpacity>
-							)}
-						/>
+						</Card>
 
-						{messagesList.length === 0 ? (
-							<Card.Content>
-								<Text
-									style={[
-										styles.emptyText,
-										{ color: isDark ? "#777" : "#999" },
-									]}
-								>
-									No messages yet.
-								</Text>
-							</Card.Content>
-						) : (
-							<List.Section>
-								{messagesList.slice(0, 3).map((msg) => (
-									<List.Item
-										key={msg.id}
-										title={`From: ${msg.sender_name}`}
-										titleStyle={styles.itemTitle}
-										description={msg.text?.length > 0 ? msg.text : "(Hidden)"}
-										descriptionNumberOfLines={1}
-										descriptionStyle={styles.itemDescription}
-										left={(props) => (
-											<Avatar.Icon
-												{...props}
-												icon="chat"
-												color={PRIMARY_BLUE}
-												style={{
-													backgroundColor: isDark ? "#222" : "#eee",
-													marginTop: 6,
-												}}
-												size={20}
-											/>
-										)}
-										onPress={() =>
-											showNotice("Tap 'View All' to read your messages")
-										}
+						{/* Messages Preview */}
+						<Card
+							style={[styles.sectionCard, isDark && styles.sectionCardDark]}
+						>
+							<Card.Title
+								title="Messages"
+								titleStyle={{
+									color: isDark ? currentTheme.colors.onSurface : PRIMARY_BLUE,
+									fontWeight: "700",
+									fontSize: 16,
+								}}
+								left={(props) => (
+									<Ionicons
+										{...props}
+										name="chatbubble-ellipses-outline"
+										color={isDark ? currentTheme.colors.primary : PRIMARY_BLUE}
 									/>
-								))}
-							</List.Section>
-						)}
-					</Card>
+								)}
+								right={() => (
+									<TouchableOpacity
+										onPress={() =>
+											handleNavigateWithExit("/messages-jobseeker")
+										}
+									>
+										<Text
+											style={[
+												styles.viewAllText,
+												{
+													color: isDark
+														? currentTheme.colors.primary
+														: PRIMARY_BLUE,
+												},
+											]}
+										>
+											View All
+										</Text>
+									</TouchableOpacity>
+								)}
+							/>
 
-					{/* Support Section */}
-					<Card style={[styles.sectionCard, isDark && styles.sectionCardDark]}>
-						<Card.Title
-							title="Support"
-							titleStyle={{ color: PRIMARY_BLUE, fontWeight: "700" }}
-							left={(props) => (
-								<Ionicons
-									{...props}
-									name="help-circle-outline"
-									color={PRIMARY_BLUE}
-								/>
+							{messagesList.length === 0 ? (
+								<Card.Content>
+									<Text
+										style={[
+											styles.emptyText,
+											{
+												color: isDark
+													? currentTheme.colors.placeholder
+													: "#999",
+											},
+										]}
+									>
+										No messages yet.
+									</Text>
+								</Card.Content>
+							) : (
+								<List.Section>
+									{messagesList.slice(0, 3).map((msg) => (
+										<List.Item
+											key={msg.id}
+											title={`From: ${msg.sender_name}`}
+											titleStyle={[
+												styles.itemTitle,
+												{ color: isDark ? currentTheme.colors.text : "#333" },
+											]}
+											description={msg.text?.length > 0 ? msg.text : "(Hidden)"}
+											descriptionNumberOfLines={1}
+											descriptionStyle={[
+												styles.itemDescription,
+												{
+													color: isDark
+														? currentTheme.colors.placeholder
+														: "#6b7280",
+												},
+											]}
+											left={(props) => (
+												<Avatar.Icon
+													{...props}
+													icon="chat"
+													color={
+														isDark ? currentTheme.colors.primary : PRIMARY_BLUE
+													}
+													style={{
+														backgroundColor: isDark ? "#222" : "#eee",
+														marginTop: 6,
+													}}
+													size={20}
+												/>
+											)}
+											onPress={() =>
+												showNotice("Tap 'View All' to read your messages")
+											}
+										/>
+									))}
+								</List.Section>
 							)}
-						/>
-						<Card.Content>
-							<TouchableOpacity
-								onPress={() => handleNavigateWithExit("/support")}
-							>
-								<Text style={[styles.link, { color: PRIMARY_BLUE }]}>
-									❓ Help Center
-								</Text>
-							</TouchableOpacity>
-							<TouchableOpacity
-								onPress={() =>
-									Linking.openURL(
-										"mailto:wearejobscape@gmail.com?subject=Jobscape Support&body=Hello Jobscape Team,"
-									)
-								}
-							>
-								<Text style={[styles.link, { color: PRIMARY_BLUE }]}>
-									✉️ Contact Us
-								</Text>
-							</TouchableOpacity>
-						</Card.Content>
-					</Card>
-				</Animated.View>
-			</ScrollView>
+						</Card>
 
-			{/* Floating Settings Button */}
-			<Animated.View
-				style={[styles.floatingSettingsBtn, { opacity: fadeAnim }]}
-			>
-				<TouchableOpacity
-					onPress={() => handleNavigateWithExit("/settings")}
-					activeOpacity={0.85}
+						{/* Support Section */}
+						<Card
+							style={[styles.sectionCard, isDark && styles.sectionCardDark]}
+						>
+							<Card.Title
+								title="Support"
+								titleStyle={{
+									color: isDark ? currentTheme.colors.onSurface : PRIMARY_BLUE,
+									fontWeight: "700",
+								}}
+								left={(props) => (
+									<Ionicons
+										{...props}
+										name="help-circle-outline"
+										color={isDark ? currentTheme.colors.primary : PRIMARY_BLUE}
+									/>
+								)}
+							/>
+							<Card.Content>
+								<TouchableOpacity
+									onPress={() => handleNavigateWithExit("/support")}
+								>
+									<Text
+										style={[
+											styles.link,
+											{
+												color: isDark
+													? currentTheme.colors.primary
+													: PRIMARY_BLUE,
+											},
+										]}
+									>
+										❓ Help Center
+									</Text>
+								</TouchableOpacity>
+								<TouchableOpacity
+									onPress={() =>
+										Linking.openURL(
+											"mailto:wearejobscape@gmail.com?subject=Jobscape Support&body=Hello Jobscape Team,"
+										)
+									}
+								>
+									<Text
+										style={[
+											styles.link,
+											{
+												color: isDark
+													? currentTheme.colors.primary
+													: PRIMARY_BLUE,
+											},
+										]}
+									>
+										✉️ Contact Us
+									</Text>
+								</TouchableOpacity>
+							</Card.Content>
+						</Card>
+					</Animated.View>
+				</ScrollView>
+
+				{/* Floating Settings Button */}
+				<Animated.View
+					style={[styles.floatingSettingsBtn, { opacity: fadeAnim }]}
 				>
-					<Ionicons name="settings-outline" size={30} color="#fff" />
-				</TouchableOpacity>
-			</Animated.View>
-		</View>
+					<TouchableOpacity
+						onPress={() => handleNavigateWithExit("/settings")}
+						activeOpacity={0.85}
+					>
+						<Ionicons name="settings-outline" size={30} color="#fff" />
+					</TouchableOpacity>
+				</Animated.View>
+
+				<Snackbar
+					visible={snackbarVisible}
+					onDismiss={() => setSnackbarVisible(false)}
+					duration={3000}
+					action={{
+						label: "Dismiss",
+						onPress: () => setSnackbarVisible(false),
+					}}
+					style={styles.snackbar}
+				>
+					{snackbarMessage}
+				</Snackbar>
+			</View>
+		</PaperProvider>
 	);
 };
 
@@ -793,12 +998,22 @@ const styles = StyleSheet.create({
 	role: {
 		fontSize: 16,
 	},
-	// Reverted styles for resume and progress
-	resumeAndProgressContainer: {
+	profileProgressSection: {
 		flexDirection: "row",
 		justifyContent: "space-between",
 		alignItems: "center",
 		marginTop: 10,
+	},
+	profileProgressCard: {
+		flexDirection: "row",
+		alignItems: "center",
+		flex: 1,
+	},
+	progressTitle: {
+		fontWeight: "bold",
+		fontSize: 10,
+		marginRight: 8,
+		textAlign: "center",
 	},
 	resumeButton: {
 		borderColor: PRIMARY_BLUE,
@@ -806,9 +1021,6 @@ const styles = StyleSheet.create({
 	},
 	resumeButtonLabel: {
 		color: PRIMARY_BLUE,
-	},
-	progressText: {
-		fontSize: 14,
 	},
 	summaryCard: {
 		marginBottom: 20,
@@ -887,6 +1099,11 @@ const styles = StyleSheet.create({
 		shadowOffset: { width: 0, height: 4 },
 		shadowOpacity: 0.3,
 		shadowRadius: 5,
+	},
+	snackbar: {
+		borderRadius: 8,
+		backgroundColor: "#333",
+		bottom: 20,
 	},
 });
 
